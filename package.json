@@ -1,0 +1,34 @@
+{
+  "name": "ams_gla",
+  "version": "1.0.0",
+  "description": "Ce projet a pour but de créer une plateforme capable de collecter, stocker et analyser des données de cryptomonnaies.   Le développement suit une approche structurée et met en avant les bonnes pratiques du génie logiciel.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "data-uri-to-buffer": "^4.0.1",
+    "dotenv": "^17.2.3",
+    "fetch-blob": "^3.2.0",
+    "formdata-polyfill": "^4.0.10",
+    "fs": "^0.0.1-security",
+    "inherits": "^2.0.3",
+    "node-domexception": "^1.0.0",
+    "node-fetch": "^3.3.2",
+    "path": "^0.12.7",
+    "process": "^0.11.10",
+    "util": "^0.10.4",
+    "web-streams-polyfill": "^3.3.3"
+  },
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@jest/globals": "^30.2.0",
+    "jest": "^30.2.0"
+  }
+}

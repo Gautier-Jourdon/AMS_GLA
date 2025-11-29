@@ -68,5 +68,5 @@ jobs:
           chmod 600 $HOME/.kube/config
 
       - name: Apply Kubernetes manifests
-        run: kubectl apply -f k8s/
+        run: kubectl apply -f k8s/ --recursive
 

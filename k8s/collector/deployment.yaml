@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: collector
-          image: tonrepo/collector:latest
+          image: docker.io/GautierJourdon/collector:latest
           env:
             - name: DATABASE_URL
-              value: "postgres://user:password@postgres-service:5432/crypto_db"
+              value: ""

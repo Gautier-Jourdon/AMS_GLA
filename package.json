@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "data-uri-to-buffer": "^4.0.1",
+    "docker": "^1.0.0",
     "dotenv": "^17.2.3",
     "fetch-blob": "^3.2.0",
     "formdata-polyfill": "^4.0.10",
@@ -22,7 +23,8 @@
   },
   "scripts": {
     "start": "node collector/index.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "service": "node collector/services/coincapService.js"
   },
   "type": "module",
   "keywords": [],

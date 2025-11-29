@@ -30,3 +30,4 @@ coverage/
 # GitHub
 .github/*.DS_Store
 collector/.env
+/collector

@@ -29,7 +29,7 @@ export async function getAssets(limit = 2000) {
       throw new Error(`Erreur réseau lors de la requête CoinCap: ${err.message}`);
     }
 
-    // Si on tombe sur l'erreur 403 mais qu'on a une clé, on retente en fournissant la clé dans l'URL (fallback)
+    // Si on tombe sur l'erreur 403 mais qu'on a une clé, on retente en fournissant la clé dans l'URL
       if ((response.status === 403 || response.status === 401) && API_KEY) {
       let bodyText = '';
       try { bodyText = await response.text(); } catch (e) { bodyText = '<impossible de lire le corps>'; }

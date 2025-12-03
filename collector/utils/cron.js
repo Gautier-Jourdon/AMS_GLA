@@ -11,4 +11,4 @@ async function updateAssets() {
 }
 
 updateAssets();
-setInterval(updateAssets, 60000); //ici, il y a une update toutes les minutes.
+setInterval(updateAssets, 60000); //ici, on update toutes les minutes.

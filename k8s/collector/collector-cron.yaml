@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: collector-cron
 spec:
-  schedule: "*/1 * * * *"  # toutes les minutes
+  schedule: "*/1 * * * *"
   jobTemplate:
     spec:
       template:
@@ -11,7 +11,7 @@ spec:
           containers:
           - name: collector
             image: docker.io/gautierjourdon/collector:latest
-            # Si tu veux passer un flag pour désactiver facilement
+            
             env:
             - name: ENABLE_COLLECTOR
               value: "true"

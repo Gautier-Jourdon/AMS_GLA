@@ -5,9 +5,9 @@
 | ID  | Intitulé court                                      | Colonne        |
 |-----|-----------------------------------------------------|----------------|
 | US1 | Définir la liste des actifs (`assets.json`)         | Fait           |
-| US2 | Service d’appel API CoinCap                         | A faire        |
-| US3 | Gestion des erreurs d’appel API                     | A faire        |
-| US4 | Modèle de sortie des données                        | A faire        |
+| US2 | Service d’appel API CoinCap                         | À faire        |
+| US3 | Gestion des erreurs d’appel API                     | Backlog        |
+| US4 | Modèle de sortie des données                        | Backlog        |
 | US5 | Planification cron locale                           | En cours       |
 | US6 | Lancement manuel du collecteur                      | En cours       |
 | US7 | Écriture des données (fichier / logs)               | A faire        |
@@ -19,10 +19,10 @@
 | US13| Manifeste k8s (CronJob)                             | En cours       |
 | US14| Structure du rapport AMS GLA                        | En cours       |
 | US15| Description de la méthode Agile / Kanban            | En cours       |
-| US16| Conclusion et perspectives du rapport               | A faire        |
+| US16| Conclusion et perspectives du rapport               | Backlog        |
 
 ## Rappels Kanban (très concis)
 
-- \textbf{Colonnes} : A faire → En cours → En revue/Test → Fait.
+- \textbf{Colonnes} : Backlog → À faire → En cours → En revue/Test → Fait.
 - \textbf{WIP} : une seule tâche en « En cours » à la fois si possible.
 - \textbf{Priorité} : d’abord les fonctionnalités indispensables et les tests, puis la documentation.

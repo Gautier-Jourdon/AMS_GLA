@@ -1,0 +1,27 @@
+%% filepath: c:\Users\gauti\Desktop\AMS\Sujet_3\Code\AMS_GLA\src\src\diagrams\seq-creer-demande.mmd
+sequenceDiagram
+    actor Utilisateur
+    participant UI as Interface
+    participant AMS as SystemeAMS
+    participant S_Demande as ServiceDemande
+    participant S_Lieu as ServiceLieu
+    participant DB as BaseDeDonnees
+
+    Utilisateur->>UI: Saisir demande (dates, lieu)
+    UI->>AMS: submitDemandeReservation(données)
+    AMS->>S_Lieu: verifierDisponibilite(lieu, dates)
+    S_Lieu->>DB: SELECT disponibilite
+    DB-->>S_Lieu: result
+    S_Lieu-->>AMS: disponible / non disponible
+
+    alt disponible
+        AMS->>S_Demande: creerDemandeReservation(données)
+        S_Demande->>DB: INSERT DemandeReservation
+        DB-->>S_Demande: OK (idDemande)
+        S_Demande-->>AMS: Demande créée
+        AMS-->>UI: Confirmation + idDemande
+        UI-->>Utilisateur: Afficher confirmation
+    else non disponible
+        AMS-->>UI: Retour erreur "Lieu indisponible"
+        UI-->>Utilisateur: Afficher message d’erreur
+    end

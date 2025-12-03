@@ -1,7 +1,5 @@
-// tests/getAssets.test.js
 import { jest } from "@jest/globals";
 
-// mock node-fetch avant d'importer le service
 jest.unstable_mockModule("node-fetch", () => ({
   default: jest.fn()
 }));

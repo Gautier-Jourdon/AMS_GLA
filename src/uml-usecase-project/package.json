@@ -1,0 +1,27 @@
+{
+  "name": "uml-usecase-project",
+  "version": "1.0.0",
+  "description": "A project to create UML use case diagrams using Mermaid syntax.",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^4.0.0",
+    "mermaid": "^10.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/uml-usecase-project.git"
+  },
+  "keywords": [
+    "UML",
+    "use case",
+    "mermaid",
+    "typescript"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

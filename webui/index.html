@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>AMS GLA - Assets Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="login-panel" class="panel panel-login visible">
+      <h1>AMS GLA - Connexion</h1>
+      <p class="subtitle">Entrez un identifiant quelconque puis appuyez sur Entrée.</p>
+      <form id="login-form">
+        <label for="username">Identifiant</label>
+        <input type="text" id="username" autocomplete="off" placeholder="Votre identifiant" required />
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" autocomplete="off" placeholder="••••••••" />
+        <button type="submit">Se connecter</button>
+        <p class="hint">La connexion est simulée : aucune vérification n'est faite.</p>
+      </form>
+    </div>
+
+    <div id="main-panel" class="panel panel-main hidden">
+      <header class="topbar">
+        <div>
+          <h1>Tableau des cryptomonnaies</h1>
+          <p class="subtitle">Données chargées depuis <code>collector/data/assets.json</code></p>
+        </div>
+        <div class="user-info">
+          <span id="current-user"></span>
+        </div>
+      </header>
+
+      <section class="controls">
+        <input type="text" id="search" placeholder="Rechercher par nom ou symbole..." />
+      </section>
+
+      <section class="table-wrapper">
+        <table id="assets-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Symbole</th>
+              <th>Nom</th>
+              <th>Prix (USD)</th>
+              <th>Variation 24h (%)</th>
+              <th>Market Cap (USD)</th>
+              <th>Volume 24h (USD)</th>
+              <th>Supply</th>
+              <th>Max Supply</th>
+              <th>Explorer</th>
+            </tr>
+          </thead>
+          <tbody id="assets-body">
+            <!-- Rempli dynamiquement par app.js -->
+          </tbody>
+        </table>
+        <div id="loading" class="status">Chargement des données...</div>
+        <div id="error" class="status error hidden">Impossible de charger les données.</div>
+      </section>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

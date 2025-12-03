@@ -7,9 +7,11 @@
     "test": "tests"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "data-uri-to-buffer": "^4.0.1",
     "docker": "^1.0.0",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "fetch-blob": "^3.2.0",
     "formdata-polyfill": "^4.0.10",
     "fs": "^0.0.1-security",
@@ -24,7 +26,8 @@
   "scripts": {
     "start": "node collector/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "service": "node collector/services/coincapService.js"
+    "service": "node collector/services/coincapService.js",
+    "webui": "node server.js"
   },
   "type": "module",
   "keywords": [],

@@ -1,0 +1,25 @@
+%% filepath: c:\Users\gauti\Desktop\AMS\Sujet_3\Code\AMS_GLA\src\src\diagrams\seq-valider-demande.mmd
+sequenceDiagram
+    actor Admin as Administrateur
+    participant UI as Interface
+    participant AMS as SystemeAMS
+    participant S_Demande as ServiceDemande
+    participant DB as BaseDeDonnees
+
+    Admin->>UI: Ouvrir demandes en attente
+    UI->>AMS: getDemandesEnAttente()
+    AMS->>S_Demande: listerEnAttente()
+    S_Demande->>DB: SELECT demandes WHERE etat=EN_ATTENTE
+    DB-->>S_Demande: liste
+    S_Demande-->>AMS: liste
+    AMS-->>UI: liste
+    UI-->>Admin: Afficher demandes
+
+    Admin->>UI: Valider demande(id)
+    UI->>AMS: validerDemande(id)
+    AMS->>S_Demande: valider(id)
+    S_Demande->>DB: UPDATE Demande SET etat=VALIDEE
+    DB-->>S_Demande: OK
+    S_Demande-->>AMS: statut mis à jour
+    AMS-->>UI: Confirmation validation
+    UI-->>Admin: Afficher "Demande validée"

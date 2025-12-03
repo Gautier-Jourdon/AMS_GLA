@@ -33,7 +33,7 @@ export async function getAssets(limit = 2000) {
       if ((response.status === 403 || response.status === 401) && API_KEY) {
       let bodyText = '';
       try { bodyText = await response.text(); } catch (e) { bodyText = '<impossible de lire le corps>'; }
-        console.warn(`[SERVICE] ${response.status} reçu avec Authorization header. Corps: ${bodyText}. Retentative avec apiKey en paramètre.`);
+        console.warn(`[SERVICE] ${response.status} reçu avec Authorization header. Corps: ${bodyText}. Re-tentative avec apiKey en paramètre.`);
 
       const urlWithKey = `${COINCAP_URL}?limit=${limit}&apiKey=${API_KEY}`;
       try {

@@ -1,0 +1,9 @@
+%%{ init: { "themeVariables": { "actorTextFill": "#ffcc00", "useCaseTextFill": "#ffffff", "useCaseFill": "#007acc" }}}%%
+graph TD
+    A[Utilisateur] -->|Utilise| B[Se connecter]
+    A -->|Utilise| C[Consulter les données]
+    A -->|Utilise| D[Modifier les données]
+    A -->|Utilise| E[Déconnexion]
+    B -->|Valide| F[Authentification]
+    C -->|Affiche| G[Tableau de bord]
+    D -->|Enregistre| H[Mise à jour des données]

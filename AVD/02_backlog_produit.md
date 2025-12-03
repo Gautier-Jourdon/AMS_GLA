@@ -1,21 +1,26 @@
 # Backlog produit – AMS GLA
 
-Le backlog produit du projet AMS GLA rassemble l’ensemble des éléments fonctionnels, techniques et documentaires que l’application doit couvrir. Il est organisé autour de petites unités de travail, les User Stories, chacune correspondant à une attente précise du cahier des charges ou à un besoin identifié en cours de développement. Même si le projet est mené seul, ce backlog joue le rôle de carte routière : il permet de savoir ce qui a déjà été réalisé, ce qui est en cours et ce qui reste à faire.
+Backlog très synthétique des User Stories du projet. Chaque US a : un identifiant, un intitulé court, un type et une priorité (H = haute, M = moyenne, B = basse).
 
-Pour chaque User Story, on peut associer un identifiant (par exemple US1, US2, etc.), un titre court, un type (fonctionnalité, tâche technique, documentation), une priorité (ce qui doit absolument être livré, ce qui est souhaitable, ce qui est optionnel) et un niveau d’estimation. Dans le contexte de ce projet, il n’est pas nécessaire d’utiliser une méthode d’estimation très complexe : quelques valeurs simples (1, 2, 3, 5) suffisent à avoir une idée de la taille relative de chaque tâche. Le statut de la User Story est lui suivi dans le tableau Kanban, avec des états comme « À faire », « En cours », « En revue » ou « Fait ».
+| ID   | Intitulé court                                             | Type            | Priorité |
+|------|------------------------------------------------------------|-----------------|----------|
+| US1  | Définir la liste des actifs dans `assets.json`            | Fonctionnelle   | H        |
+| US2  | Appeler l’API CoinCap pour un actif                       | Fonctionnelle   | H        |
+| US3  | Gérer les erreurs d’appel API                             | Technique       | H        |
+| US4  | Structurer le format des données collectées               | Fonctionnelle   | M        |
+| US5  | Planifier la collecte avec un cron local                  | Technique       | H        |
+| US6  | Permettre un lancement manuel de la collecte              | Fonctionnelle   | M        |
+| US7  | Écrire les résultats dans un fichier / logs structurés    | Fonctionnelle   | H        |
+| US8  | Ajouter un horodatage et l’identifiant d’actif aux sorties| Fonctionnelle   | M        |
+| US9  | Mettre en place Jest et la config de base                 | Technique       | H        |
+| US10 | Tester la lecture d’`assets.json`                         | Test            | M        |
+| US11 | Tester la gestion des erreurs API et du cron              | Test            | M        |
+| US12 | Rédiger un Dockerfile pour le collecteur                  | Technique       | H        |
+| US13 | Définir un CronJob Kubernetes (si demandé)                | Technique       | B        |
+| US14 | Structurer le rapport AMS GLA                             | Documentation   | M        |
+| US15 | Expliquer la démarche Agile / Kanban dans le rapport      | Documentation   | M        |
+| US16 | Rédiger la conclusion et les pistes d’amélioration        | Documentation   | B        |
+| US17 | Ajouter une petite interface web de consultation des données | Fonctionnelle| B        |
+| US18 | Mettre en place un script `npm run webui` pour lancer l’interface | Technique | B |
 
-Une première catégorie de User Stories concerne directement la collecte des données. On y trouve par exemple la définition de la liste des actifs à suivre dans `assets.json` (US1), l’implémentation du service d’appel à l’API CoinCap (US2), la gestion des erreurs dans ces appels (US3) et la structuration des données collectées selon un modèle commun (US4). Ces éléments traduisent les besoins de base exprimés dans le cahier des charges : savoir quels actifs surveiller, être capable de les interroger fiablement et conserver les résultats dans un format propre.
-
-Une deuxième catégorie touche à la planification et à l’automatisation. Elle regroupe les stories liées à l’exécution planifiée locale, par exemple via un cron Node (US5), et celles qui garantissent la possibilité de lancer la collecte manuellement, par une simple commande Node (US6). L’idée est de permettre à la fois un fonctionnement régulier en tâche de fond et une exécution ponctuelle pour tester ou déboguer la logique de collecte.
-
-Viennent ensuite les User Stories relatives à la persistance et à la sortie des données. Elles concernent l’écriture des données collectées dans un fichier ou dans un système de logs (US7) ainsi que la structuration de ces logs (US8), de façon à inclure systématiquement des informations comme le timestamp, l’identifiant de l’actif et la valeur mesurée. Ces stories prolongent de manière pratique les exigences du cahier des charges concernant le format de sortie.
-
-Le volet qualité et tests est lui aussi décomposé en plusieurs User Stories. L’une d’elles couvre la mise en place de Jest et de sa configuration minimale (US9). D’autres portent sur la rédaction de tests pour la lecture d’`assets.json` et le comportement du fetcher (US10), ou encore sur l’ajout de tests spécifiques pour les erreurs d’API et la planification cron (US11). Même si ces tâches sont parfois moins visibles qu’une fonctionnalité, elles sont essentielles pour sécuriser le fonctionnement de l’application.
-
-Le projet comporte par ailleurs une dimension d’industrialisation et de déploiement. Dans le backlog, cela se traduit par des User Stories dédiées au Dockerfile (US12), qui doit permettre de construire une image fonctionnelle, et au manifeste Kubernetes (US13), qui décrit par exemple un CronJob planifiant l’exécution du collecteur dans un cluster. Ces éléments peuvent être abordés dans un second temps, une fois que la logique de collecte est suffisamment stable.
-
-Enfin, une dernière catégorie concerne la documentation et le rapport. On y trouve la structuration du rapport AMS GLA (US14), la rédaction de la partie expliquant la méthode Agile et Kanban utilisée (US15), ainsi que la conclusion et les perspectives (US16). Ces User Stories rappellent que la production écrite fait pleinement partie du livrable final, au même titre que le code ou les scripts de déploiement.
-
-À partir de ce backlog global, il est possible d’identifier un sous-ensemble de priorités à court terme. Dans l’état actuel probable du code, les premières tâches à consolider sont la finalisation du service d’appel API et de la gestion d’erreurs (US2 et US3), la clarification du format de sortie et de la persistance des données (US7 et US8), le renforcement des tests unitaires, notamment autour des erreurs et de la planification (US10 et US11), ainsi que la vérification du Dockerfile et du manifeste Kubernetes (US12 et US13). En parallèle, le travail de documentation (US14, US15 et US16) peut progresser au fur et à mesure de l’avancement technique.
-
-Ce fichier de backlog peut être mis à jour régulièrement. À chaque fois qu’une User Story change d’état, il est possible d’indiquer la date à laquelle elle est passée en « Fait » ou de préciser pourquoi elle est temporairement bloquée. De cette façon, le backlog devient non seulement une liste d’objectifs, mais aussi une trace de l’historique du projet et des choix de priorisation qui ont été faits.
+Le détail de l’avancement (À faire / En cours / Fait) est suivi dans le tableau Kanban.

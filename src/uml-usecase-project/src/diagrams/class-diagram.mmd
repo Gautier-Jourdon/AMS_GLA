@@ -1,0 +1,78 @@
+%% filepath: c:\Users\gauti\Desktop\AMS\Sujet_3\Code\AMS_GLA\src\src\diagrams\class-diagram.mmd
+classDiagram
+    class SystemeAMS {
+      +authentifier(login, mdp)
+      +gererDemandes()
+      +genererRapports()
+    }
+
+    class Utilisateur {
+      +id : int
+      +nom : string
+      +email : string
+      +role : Role
+      +seConnecter()
+      +seDeconnecter()
+    }
+
+    class Agent {
+      +matricule : string
+      +affecterLieu(l : Lieu)
+    }
+
+    class Administrateur {
+      +creerUtilisateur()
+      +modifierUtilisateur()
+      +supprimerUtilisateur()
+      +configurerSysteme()
+    }
+
+    class Lieu {
+      +id : int
+      +nom : string
+      +type : string
+      +capacite : int
+    }
+
+    class Demande {
+      +id : int
+      +dateCreation : Date
+      +etat : EtatDemande
+      +creer()
+      +valider()
+      +rejeter()
+    }
+
+    class DemandeReservation {
+      +dateDebut : Date
+      +dateFin : Date
+    }
+
+    class DemandeIntervention {
+      +description : string
+      +priorite : int
+    }
+
+    class EtatDemande {
+      <<enum>>
+      EN_ATTENTE
+      VALIDEE
+      REJETEE
+      ANNULEE
+    }
+
+    class Role {
+      <<enum>>
+      AGENT
+      ADMIN
+    }
+
+    SystemeAMS --> Utilisateur : gère >
+    Utilisateur <|-- Agent
+    Utilisateur <|-- Administrateur
+
+    Demande <|-- DemandeReservation
+    Demande <|-- DemandeIntervention
+
+    Utilisateur "1" --> "0..*" Demande : crée >
+    Demande "1" --> "1" Lieu : concerne >

@@ -9,16 +9,42 @@
 <body>
   <div id="app">
     <div id="login-panel" class="panel panel-login visible">
-      <h1>AMS GLA - Connexion</h1>
-      <p class="subtitle">Entrez un identifiant quelconque puis appuyez sur Entrée.</p>
-      <form id="login-form">
-        <label for="username">Identifiant</label>
-        <input type="text" id="username" autocomplete="off" placeholder="Votre identifiant" required />
-        <label for="password">Mot de passe</label>
-        <input type="password" id="password" autocomplete="off" placeholder="••••••••" />
-        <button type="submit">Se connecter</button>
-        <p class="hint">La connexion est simulée : aucune vérification n'est faite.</p>
-      </form>
+      <h1>AMS GLA - Connexion / Inscription</h1>
+        <div class="tabs">
+          <button id="tab-login" class="active">Connexion</button>
+          <button id="tab-signup">Inscription</button>
+        </div>
+        <div id="login-forms">
+          <form id="login-form">
+            <div>
+              <label for="email">Email</label>
+              <input id="email" type="email" required />
+            </div>
+            <div>
+              <label for="password">Mot de passe</label>
+              <input id="password" type="password" required />
+            </div>
+            <div id="login-error" class="error hidden"></div>
+            <button type="submit">Se connecter</button>
+          </form>
+
+          <form id="signup-form" class="hidden">
+            <div>
+              <label for="su_email">Email</label>
+              <input id="su_email" type="email" required />
+            </div>
+            <div>
+              <label for="su_password">Mot de passe</label>
+              <input id="su_password" type="password" required />
+            </div>
+            <div>
+              <label for="su_password_confirm">Confirmer mot de passe</label>
+              <input id="su_password_confirm" type="password" required />
+            </div>
+            <div id="signup-error" class="error hidden"></div>
+            <button type="submit">S'inscrire</button>
+          </form>
+        </div>
     </div>
 
     <div id="main-panel" class="panel panel-main hidden">
@@ -59,6 +85,22 @@
         <div id="loading" class="status">Chargement des données...</div>
         <div id="error" class="status error hidden">Impossible de charger les données.</div>
       </section>
+        <section id="alerts-section">
+          <h3>Mes alertes</h3>
+          <form id="alert-form">
+            <label for="alert-symbol">Symbol</label>
+            <input id="alert-symbol" placeholder="BTC" />
+            <label for="alert-threshold">Seuil</label>
+            <input id="alert-threshold" type="number" step="any" />
+            <label for="alert-direction">Direction</label>
+            <select id="alert-direction">
+              <option value="above">Au dessus</option>
+              <option value="below">En dessous</option>
+            </select>
+            <button type="submit">Créer alerte</button>
+          </form>
+          <div id="alerts-list"></div>
+        </section>
     </div>
   </div>
 

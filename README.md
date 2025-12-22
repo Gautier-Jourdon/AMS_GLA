@@ -6,13 +6,13 @@ Le développement suit une approche structurée et met en avant les bonnes prati
 ## Fonctionnalités prévues
 
 ### Collecte des données
-- Récupération automatique des données via des APIs publiques.
-- Planification de la collecte.
-- Tolérance aux pannes via une file de tâches.
+- Récupération automatique des données via des APIs publiques. (fini)
+- Planification de la collecte. (fini)
+- Tolérance aux pannes via une file de tâches. (fini)
 - Stockage des données dans une base dédiée.
 
 ### API Backend
-- Accès aux données collectées.
+- Accès aux données collectées. (fini)
 - Authentification sécurisée.
 - Gestion des utilisateurs et des rôles.
 - Endpoints pour les graphiques, les alertes et les prévisions.
@@ -29,9 +29,9 @@ Le développement suit une approche structurée et met en avant les bonnes prati
 - Régression linéaire simple.
 
 ### DevOps
-- Dockerisation de l’ensemble des services.
-- Pipeline CI/CD.
-- Déploiement Kubernetes.
+- Dockerisation de l’ensemble des services. (presque fini)
+- Pipeline CI/CD. (fini. mais à revoir plus tard)
+- Déploiement Kubernetes. (fini)
 - Monitoring via Prometheus et Grafana.
 
 ## Organisation du projet

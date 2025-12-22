@@ -1,0 +1,59 @@
+# Kubernetes template for connecting services to local Supabase
+# - Create a Secret with your Supabase URL and service role key
+# - Adapt the CronJob/Deployment image to include your collector code or build an image
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: supabase-credentials
+  namespace: default
+type: Opaque
+stringData:
+  SUPABASE_URL: "http://supabase.internal:54321" # override with your Supabase URL
+  SUPABASE_KEY: "REPLACE_WITH_SERVICE_ROLE_KEY"
+
+---
+# Example CronJob to run the collector periodically (adjust schedule)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: collector-cron
+  namespace: default
+spec:
+  schedule: "*/5 * * * *" # every 5 minutes
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: collector
+              image: node:20
+              command: ["/bin/sh","-c"]
+              args:
+                - |
+                  set -e
+                  # install dependencies if needed (network access required)
+                  cd /work
+                  if [ -f package.json ]; then npm install --no-audit --no-fund; fi
+                  node index.js
+              env:
+                - name: SUPABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: supabase-credentials
+                      key: SUPABASE_URL
+                - name: SUPABASE_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: supabase-credentials
+                      key: SUPABASE_KEY
+              volumeMounts:
+                - name: repo
+                  mountPath: /work
+          restartPolicy: OnFailure
+          volumes:
+            - name: repo
+              hostPath:
+                # mount your project folder or replace with a proper image that already contains the code
+                path: /home/supabase/collector
+                type: Directory

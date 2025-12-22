@@ -18,6 +18,7 @@
     "inherits": "^2.0.3",
     "node-domexception": "^1.0.0",
     "node-fetch": "^3.3.2",
+    "pg": "^8.11.0",
     "path": "^0.12.7",
     "process": "^0.11.10",
     "util": "^0.10.4",
@@ -27,8 +28,10 @@
     "start": "node collector/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "service": "node collector/services/coincapService.js",
-    "webui": "node server.js"
+    "webui": "node server.js",
+    "apply-schemas": "node scripts/apply-schemas.js"
   },
+  "verify-db": "node scripts/verify-db.js",
   "type": "module",
   "keywords": [],
   "author": "",

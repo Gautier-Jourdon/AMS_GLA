@@ -33,11 +33,17 @@ export function getTabSignup() {
 }
 
 export function getCurrentUserSpan() {
-  return typeof global !== 'undefined' && global.currentUserSpan
-    ? global.currentUserSpan
-    : (typeof window !== 'undefined' && window.currentUserSpan)
-      ? window.currentUserSpan
-      : (typeof document !== 'undefined' ? document.getElementById('current-user') : null);
+  if (typeof document !== 'undefined') {
+
+    return document.getElementById('current-user') || (typeof global !== 'undefined' ? global.currentUserSpan : null) || (typeof window !== 'undefined' ? window.currentUserSpan : null);
+
+  }
+
+  if (typeof global !== 'undefined' && global.currentUserSpan) return global.currentUserSpan;
+
+  if (typeof window !== 'undefined' && window.currentUserSpan) return window.currentUserSpan;
+
+  return null;
 }
 
 export function getLoadingEl() {
@@ -565,39 +571,77 @@ export function getAlertsList() {
 
 }
 
-export async function loadAlerts(){
+export async function loadAlerts() {
+
   const alertsListEl = getAlertsList();
-  if (!authToken) { alertsListEl.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>'; return; }
-  try{
-    const r = await fetch('/api/alerts', { headers: { Authorization: `Bearer ${authToken}` } });
+
+  if (!getAuthToken()) {
+
+    alertsListEl.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>';
+
+    return;
+
+  }
+
+  try {
+
+    const r = await fetch('/api/alerts', { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+
     if (!r.ok) { alertsListEl.innerHTML = `<div class="status error">Erreur: ${r.status}</div>`; return; }
+
     const data = await r.json();
-    if (!Array.isArray(data) || data.length===0) { alertsListEl.innerHTML = '<div class="status">Aucune alerte.</div>'; return; }
+
+    if (!Array.isArray(data) || data.length === 0) { alertsListEl.innerHTML = '<div class="status">Aucune alerte.</div>'; return; }
+
     alertsListEl.innerHTML = '';
+
     data.forEach(a => {
+
       const div = document.createElement('div');
+
       div.className = 'alert-item';
+
       div.innerHTML = `<strong>${a.symbol}</strong> ${a.direction} ${a.threshold} <button data-id="${a.id}" class="alert-delete">Supprimer</button>`;
+
       alertsListEl.appendChild(div);
+
     });
+
     // attach delete handlers
-    document.querySelectorAll('.alert-delete').forEach(btn => btn.addEventListener('click', async (e)=>{
+
+    document.querySelectorAll('.alert-delete').forEach(btn => btn.addEventListener('click', async (e) => {
+
       const id = e.currentTarget.getAttribute('data-id');
+
       await deleteAlert(id);
+
     }));
-  }catch(err){ alertsListEl.innerHTML = `<div class="status error">${err.message}</div>`; }
+
+  } catch (err) {
+
+    alertsListEl.innerHTML = `<div class="status error">${err.message}</div>`;
+
+  }
+
 }
 
 
 // (supprimé: doublon createAlert)
 
-export async function deleteAlert(id){
-  if (!authToken) return alert('Non authentifié');
-  try{
-    const r = await fetch(`/api/alerts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${authToken}` } });
-    if (!r.ok) { return alert('Erreur suppression: '+r.status); }
+export async function deleteAlert(id) {
+
+  if (!getAuthToken()) return alert('Non authentifié');
+
+  try {
+
+    const r = await fetch(`/api/alerts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getAuthToken()}` } });
+
+    if (!r.ok) { return alert('Erreur suppression: ' + r.status); }
+
     await loadAlerts();
-  }catch(e){ alert('Erreur: '+e.message); }
+
+  } catch (e) { alert('Erreur: ' + e.message); }
+
 }
 
 function handleAlertFormSubmit(e){
@@ -611,60 +655,125 @@ function handleAlertFormSubmit(e){
 
 export function attachImportTimeListeners(){
   try{
-    if(typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
-    if(chartSelect){
-      chartSelect.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
-      chartPeriod.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
+    if (typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
+
+    const cs = getChartSelect();
+
+    const cp = getChartPeriod();
+
+    if (cs) {
+
+      cs.addEventListener('change', () => renderChartFor(cs.value, cp.value));
+
+      cp.addEventListener('change', () => renderChartFor(cs.value, cp.value));
+
     }
-    alertForm?.addEventListener('submit', handleAlertFormSubmit);
-    tabLogin?.addEventListener('click', showLogin);
-    tabSignup?.addEventListener('click', showSignup);
+
+    getAlertForm()?.addEventListener('submit', handleAlertFormSubmit);
+
+    getTabLogin()?.addEventListener('click', showLogin);
+
+    getTabSignup()?.addEventListener('click', showSignup);
   }catch(e){ /* defensive */ }
 }
 
 // load alerts after successful login / session restore
-if (authToken) loadAlerts();
+if (getAuthToken()) loadAlerts();
 
 // (search input handler is defined earlier)
 
 // Simulation de connexion : on accepte n'importe quoi et on passe à la suite
 export function showLogin() {
-  loginForm.classList.remove('hidden');
-  signupForm.classList.add('hidden');
-  tabLogin.classList.add('active');
-  tabSignup.classList.remove('active');
+
+  const lf = getLoginForm();
+
+  const sf = getSignupForm();
+
+  const tl = getTabLogin();
+
+  const ts = getTabSignup();
+
+  lf && lf.classList.remove('hidden');
+
+  sf && sf.classList.add('hidden');
+
+  tl && tl.classList.add('active');
+
+  ts && ts.classList.remove('active');
+
 }
 
 export function showSignup() {
-  loginForm.classList.add('hidden');
-  signupForm.classList.remove('hidden');
-  tabLogin.classList.remove('active');
-  tabSignup.classList.add('active');
+
+  const lf = getLoginForm();
+
+  const sf = getSignupForm();
+
+  const tl = getTabLogin();
+
+  const ts = getTabSignup();
+
+  lf && lf.classList.add('hidden');
+
+  sf && sf.classList.remove('hidden');
+
+  tl && tl.classList.remove('active');
+
+  ts && ts.classList.add('active');
+
 }
 
 // attach listeners at import-time (keeps previous behavior)
 attachImportTimeListeners();
 
 async function handleLoginSubmit(e) {
+
   e.preventDefault();
+
   const email = document.getElementById('email').value.trim();
+
   const password = document.getElementById('password').value;
+
   const errEl = document.getElementById('login-error');
+
   errEl.classList.add('hidden');
+
   try {
-    const resp = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ email, password }) });
+
+    const resp = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+
     const json = await resp.json();
+
     if (!resp.ok) { errEl.textContent = json.error || JSON.stringify(json); errEl.classList.remove('hidden'); return; }
+
     // Store access token
-    authToken = json.access_token || json.access_token || json.access_token;
-    if (authToken) localStorage.setItem('supabase_token', authToken);
+
+    const token = json.access_token || json.access_token || json.access_token;
+
+    setAuthToken(token);
+
+    const user = json?.user || { email };
+
+    setAuthUser(user);
+
     await loadCurrentUser();
-    loginPanel.classList.add('hidden');
-    mainPanel.classList.remove('hidden');
+
+    const lp = getLoginPanel();
+
+    const mp = getMainPanel();
+
+    lp && lp.classList.add('hidden');
+
+    mp && mp.classList.remove('hidden');
+
     loadAssets();
+
   } catch (err) {
+
     errEl.textContent = err.message; errEl.classList.remove('hidden');
+
   }
+
 }
 
 async function handleSignupSubmit(e) {
@@ -687,17 +796,38 @@ async function handleSignupSubmit(e) {
   }
 }
 
-loginForm?.addEventListener('submit', handleLoginSubmit);
-signupForm?.addEventListener('submit', handleSignupSubmit);
+getLoginForm()?.addEventListener('submit', handleLoginSubmit);
+
+getSignupForm()?.addEventListener('submit', handleSignupSubmit);
 
 export async function loadCurrentUser() {
-  if (!authToken) return;
+
   try {
-    const r = await fetch('/auth/me', { headers: { Authorization: `Bearer ${authToken}` } });
-    if (!r.ok) return;
+
+    const opts = getAuthToken() ? { headers: { Authorization: `Bearer ${getAuthToken()}` } } : {};
+
+    const r = await fetch('/auth/me', opts);
+
+    if (!r || !r.ok) return;
+
     const user = await r.json();
-    currentUserSpan.textContent = `Connecté en tant ${user.email || user.id || 'Utilisateur'}`;
-  } catch(e) { console.warn('get user failed', e.message); }
+
+    let span = getCurrentUserSpan();
+
+    if (!span && typeof document !== 'undefined') {
+
+      span = document.getElementById('current-user') || document.createElement('span');
+
+      span.id = 'current-user';
+
+      document.body.appendChild(span);
+
+    }
+
+    if (span) span.textContent = `Connecté en tant ${user.email || user.id || 'Utilisateur'}`;
+
+  } catch (e) { console.warn('get user failed', e.message); }
+
 }
 
 

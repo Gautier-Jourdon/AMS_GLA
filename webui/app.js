@@ -11,8 +11,25 @@ const errorEl = document.getElementById("error");
 const tableBody = document.getElementById("assets-body");
 const searchInput = document.getElementById("search");
 
+const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+const tabSections = Array.from(document.querySelectorAll('.tab-section'));
+const chartSelect = document.getElementById('chart-crypto');
+const chartPeriod = document.getElementById('chart-period');
+const alertForm = document.getElementById('alert-form');
+const alertsList = document.getElementById('alerts-list');
+
 let allAssets = [];
 let authToken = localStorage.getItem('supabase_token') || null;
+let authUser = localStorage.getItem('supabase_user') ? JSON.parse(localStorage.getItem('supabase_user')) : null;
+
+// Session inactivity
+importSessionModule();
+let session = null;
+
+function importSessionModule(){
+  // dynamic import for session helper used in tests
+  try { window.Session = window.Session || null; } catch(e){}
+}
 
 function formatNumber(num) {
   if (num === null || num === undefined) return "-";
@@ -68,6 +85,7 @@ async function loadAssets() {
     const data = await response.json();
     allAssets = Array.isArray(data) ? data : [];
     renderTable(allAssets);
+    populateChartSelect(allAssets);
   } catch (err) {
     console.error("Erreur de chargement des assets", err);
     errorEl.textContent = "Erreur de chargement des données (" + err.message + ")";
@@ -77,9 +95,160 @@ async function loadAssets() {
   }
 }
 
+function populateChartSelect(assets){
+  if(!chartSelect) return;
+  chartSelect.innerHTML = '';
+  assets.slice(0,200).forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.symbol;
+    opt.textContent = `${a.symbol} — ${a.name}`;
+    chartSelect.appendChild(opt);
+  });
+}
+
+// ---- Tabs handling ----
+function switchToTab(name){
+  tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  tabSections.forEach(s => s.classList.toggle('hidden', s.id !== 'tab-'+name));
+}
+tabButtons.forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
+
+// ---- Chart.js setup ----
+let cryptoChart = null;
+function generateMockHistory(price, points){
+  const arr = [];
+  let p = Number(price) || 1;
+  for(let i=0;i<points;i++){
+    const noise = (Math.random()-0.5) * p * 0.02;
+    p = Math.max(0.000001, p + noise);
+    arr.push(Number(p.toFixed(6)));
+  }
+  return arr;
+}
+
+function renderChartFor(symbol, period){
+  const asset = allAssets.find(a => a.symbol === symbol) || allAssets[0];
+  if(!asset) return;
+  const now = Date.now();
+  const points = period === '24h' ? 24 : period === '7d' ? 7*24 : 30*24;
+  const history = generateMockHistory(asset.priceUsd || 1, points);
+  const labels = history.map((_,i) => new Date(now - ((history.length - i -1) * 60*60*1000)).toLocaleString());
+
+  const ctx = document.getElementById('crypto-chart').getContext('2d');
+  if(cryptoChart) cryptoChart.destroy();
+  cryptoChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label: `${asset.symbol} price (USD)`, data: history, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.12)', tension: 0.15 }]
+    },
+    options: { plugins: { legend: { display: true } }, scales: { x: { display: true }, y: { display: true } } }
+  });
+}
+
+if(chartSelect){
+  chartSelect.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
+  chartPeriod.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
+}
+
+// ---- Alerts UI ----
+if(alertForm){
+  alertForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if(!authToken) return alert('Vous devez être connecté pour créer une alerte');
+    const symbol = document.getElementById('alert-symbol').value.trim();
+    const threshold = Number(document.getElementById('alert-threshold').value);
+    const direction = document.getElementById('alert-direction').value;
+    try{
+      const r = await fetch('/api/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+authToken }, body: JSON.stringify({ symbol, threshold, direction }) });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const json = await r.json();
+      appendAlertToList(json);
+    }catch(err){ console.error('create alert', err); alert('Erreur création alerte'); }
+  });
+}
+
+function appendAlertToList(a){
+  const div = document.createElement('div');
+  div.className = 'alert-item';
+  div.textContent = `${a.symbol} ${a.direction} ${a.threshold}`;
+  alertsList.appendChild(div);
+}
+
+// ---- Auth flow ----
+function showLoggedIn(){
+  loginPanel.classList.add('hidden');
+  mainPanel.classList.remove('hidden');
+  currentUserSpan.textContent = authUser ? (authUser.email || authUser.id) : 'connecté';
+  switchToTab('table');
+  // start session inactivity
+  startSessionTimer();
+}
+
+function showLoggedOut(){
+  loginPanel.classList.remove('hidden');
+  mainPanel.classList.add('hidden');
+  currentUserSpan.textContent = '';
+  stopSessionTimer();
+}
+
+async function doLogin(email, password){
+  const r = await fetch('/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+  const json = await r.json();
+  if(!r.ok) throw new Error(json?.error || JSON.stringify(json));
+  // save token if present
+  authToken = json?.access_token || json?.token || null;
+  if(authToken) localStorage.setItem('supabase_token', authToken);
+  authUser = json?.user || { email };
+  localStorage.setItem('supabase_user', JSON.stringify(authUser));
+  showLoggedIn();
+}
+
+async function doSignup(email, password){
+  const r = await fetch('/auth/signup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+  const json = await r.json();
+  if(!r.ok) throw new Error(json?.error || JSON.stringify(json));
+  // after signup, try login
+  return doLogin(email, password);
+}
+
+
+
+// ---- Session inactivity (30s) ----
+let inactivityTimeout = null;
+function resetInactivity(){
+  if(inactivityTimeout) clearTimeout(inactivityTimeout);
+  inactivityTimeout = setTimeout(()=>{
+    // auto logout after 30s
+    doLogout(true);
+  }, 30 * 1000);
+}
+
+function startSessionTimer(){
+  ['mousemove','keydown','click','scroll'].forEach(evt => window.addEventListener(evt, resetInactivity));
+  resetInactivity();
+}
+function stopSessionTimer(){
+  ['mousemove','keydown','click','scroll'].forEach(evt => window.removeEventListener(evt, resetInactivity));
+  if(inactivityTimeout) clearTimeout(inactivityTimeout);
+}
+
+function doLogout(auto=false){
+  authToken = null; authUser = null; localStorage.removeItem('supabase_token'); localStorage.removeItem('supabase_user');
+  showLoggedOut();
+  if(auto) alert('Vous avez été déconnecté pour cause d\'inactivité (30s)');
+}
+
+// Init
+if(authToken){ showLoggedIn(); loadAssets(); } else { showLoggedOut(); }
+
+// ensure search filters
+searchInput && searchInput.addEventListener('input', (e)=>{
+  const q = e.target.value.trim().toLowerCase();
+  renderTable(allAssets.filter(a => a.name?.toLowerCase().includes(q) || a.symbol?.toLowerCase().includes(q)));
+});
+
 /* Alerts: create / list / delete using protected API */
-const alertForm = document.getElementById('alert-form');
-const alertsList = document.getElementById('alerts-list');
 
 async function loadAlerts(){
   if (!authToken) { alertsList.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>'; return; }
@@ -133,23 +302,7 @@ alertForm?.addEventListener('submit', (e)=>{
 // load alerts after successful login / session restore
 if (authToken) loadAlerts();
 
-// Filtre simple par nom ou symbole
-if (searchInput) {
-  searchInput.addEventListener("input", () => {
-    const q = searchInput.value.trim().toLowerCase();
-    if (!q) {
-      renderTable(allAssets);
-      return;
-    }
-    const filtered = allAssets.filter((asset) => {
-      return (
-        asset.name.toLowerCase().includes(q) ||
-        asset.symbol.toLowerCase().includes(q)
-      );
-    });
-    renderTable(filtered);
-  });
-}
+// (search input handler is defined earlier)
 
 // Simulation de connexion : on accepte n'importe quoi et on passe à la suite
 function showLogin() {

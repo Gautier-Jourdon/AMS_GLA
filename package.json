@@ -9,7 +9,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "data-uri-to-buffer": "^4.0.1",
-    "docker": "^1.0.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "fetch-blob": "^3.2.0",
@@ -18,8 +17,8 @@
     "inherits": "^2.0.3",
     "node-domexception": "^1.0.0",
     "node-fetch": "^3.3.2",
-    "pg": "^8.11.0",
     "path": "^0.12.7",
+    "pg": "^8.11.0",
     "process": "^0.11.10",
     "util": "^0.10.4",
     "web-streams-polyfill": "^3.3.3"
@@ -29,7 +28,10 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "service": "node collector/services/coincapService.js",
     "webui": "node server.js",
-    "apply-schemas": "node scripts/apply-schemas.js"
+    "apply-schemas": "node scripts/apply-schemas.js",
+    "docker-psql-assets": "node scripts/docker-psql-assets.js",
+    "show-assets": "node scripts/show-assets.js",
+    "exec-show-assets": "node scripts/exec-show-assets.js"
   },
   "verify-db": "node scripts/verify-db.js",
   "type": "module",

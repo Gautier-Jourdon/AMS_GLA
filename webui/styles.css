@@ -18,8 +18,7 @@ body {
   width: 100%;
   max-width: 1280px;
   padding: 32px 24px;
-  display: grid;
-  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  display: block;
   gap: 24px;
 }
 
@@ -33,11 +32,12 @@ body {
 }
 
 .panel-login {
-  align-self: flex-start;
+  max-width: 480px;
+  margin: 0 auto 24px auto;
 }
 
 .panel-main {
-  align-self: stretch;
+  margin: 0 auto;
 }
 
 .panel.hidden {
@@ -52,6 +52,22 @@ h1 {
   font-size: 1.6rem;
   margin-bottom: 8px;
 }
+
+.main-tabs { display:flex; gap:8px; margin:12px 0 18px 0; }
+.main-tabs .tab-btn { background:transparent; color:#cbd5e1; border:1px solid transparent; padding:8px 12px; border-radius:8px; cursor:pointer }
+.main-tabs .tab-btn.active { background:linear-gradient(90deg,#0ea5e9,#6366f1); color:white; box-shadow:0 8px 24px rgba(99,102,241,0.18); }
+.tab-section { padding:12px 0; }
+
+.chart-controls { display:flex; gap:12px; align-items:center; margin-bottom:12px }
+
+.alert-item{ background: rgba(255,255,255,0.03); padding:8px 10px; margin:6px 0; border-radius:6px; border:1px solid rgba(255,255,255,0.03) }
+
+/* Ensure login panel overlays when main visible to avoid seeing both */
+.panel-login.hidden { display:none }
+.panel-main.hidden { display:none }
+
+.status{ margin-top:12px; color:#9ca3af }
+.status.error{ color:#fecaca }
 
 .subtitle {
   font-size: 0.9rem;

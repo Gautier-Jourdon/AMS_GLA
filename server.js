@@ -24,6 +24,8 @@ const DEV_AUTH = (process.env.DEV_AUTH === 'true') || (process.env.NODE_ENV === 
 
 // In-memory map of dev tokens -> user info (only for DEV_AUTH mode)
 const DEV_TOKENS = new Map();
+// Reverse map email -> token for stable dev sessions
+const DEV_USER_BY_EMAIL = new Map();
 // In-memory alerts per user for DEV_AUTH mode
 const DEV_ALERTS = new Map();
 
@@ -262,19 +264,55 @@ app.get("/api/assets", async (req, res) => {
     }
   });
 
-app.listen(PORT, () => {
-  console.log(`Serveur web démarré sur http://localhost:${PORT}/webui/index.html`);
-});
+const _thisFile = fileURLToPath(import.meta.url);
+const _isMain = process.argv[1] === _thisFile;
+if (_isMain) {
+  app.listen(PORT, () => {
+    console.log(`Serveur web démarré sur http://localhost:${PORT}/webui/index.html`);
+    if (DEV_AUTH) {
+      console.log('[DEV] DEV_AUTH enabled — DB calls are skipped or emulated in dev mode');
+    } else {
+      // run startup checks (extracted for testability)
+      runStartupChecks().catch(() => {});
+    }
+  });
+}
+
+export default app;
+
+// Extracted startup checks to allow tests to exercise startup branches
+export async function runStartupChecks() {
+  if (DEV_AUTH) {
+    console.log('[DEV] DEV_AUTH enabled — DB calls are skipped or emulated in dev mode');
+    return;
+  }
+  try {
+    const client = getPgClient();
+    await client.connect();
+    await client.end();
+    console.log('[PG] Postgres reachable');
+  } catch (e) {
+    console.warn('[PG] Postgres connection test failed:', e.message || e);
+    console.warn('[PG] If you expect Postgres to be available, check PGHOST/PGPORT/PGUSER/PGPASSWORD env vars');
+  }
+}
 
 // Auth proxy endpoints for frontend (signup / login)
 app.post('/auth/signup', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'missing email or password' });
   if (DEV_AUTH) {
-    // permissive dev signup: return a dev token without DB
+    // permissive dev signup: reuse existing dev token if present, otherwise create one
+    if (DEV_USER_BY_EMAIL.has(email)) {
+      const token = DEV_USER_BY_EMAIL.get(email);
+      const user = DEV_TOKENS.get(token);
+      console.log('[AUTH] DEV signup reuse for', email);
+      return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user });
+    }
     const token = 'dev-token-' + Date.now();
     const user = { id: 'dev-' + Date.now(), email };
     DEV_TOKENS.set(token, user);
+    DEV_USER_BY_EMAIL.set(email, token);
     console.log('[AUTH] DEV signup for', email);
     return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user });
   }
@@ -320,10 +358,17 @@ app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'missing email or password' });
   if (DEV_AUTH) {
-    // permissive dev login: accept any credentials and return dev token
+    // permissive dev login: reuse existing token for email or create one
+    if (DEV_USER_BY_EMAIL.has(email)) {
+      const token = DEV_USER_BY_EMAIL.get(email);
+      const user = DEV_TOKENS.get(token);
+      console.log('[AUTH] DEV login reuse for', email);
+      return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user });
+    }
     const token = 'dev-token-' + Date.now();
     const user = { id: 'dev-' + Date.now(), email };
     DEV_TOKENS.set(token, user);
+    DEV_USER_BY_EMAIL.set(email, token);
     console.log('[AUTH] DEV login for', email);
     return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user });
   }
@@ -368,6 +413,16 @@ app.post('/auth/login', async (req, res) => {
 app.post('/rpc/signup', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'missing email' });
+  if (DEV_AUTH) {
+    // in DEV mode, emulate rpc_create_user
+    if (DEV_USER_BY_EMAIL.has(email)) return res.status(409).json({ error: 'user exists' });
+    const token = 'dev-token-' + Date.now();
+    const user = { id: 'dev-' + Date.now(), email };
+    DEV_TOKENS.set(token, user);
+    DEV_USER_BY_EMAIL.set(email, token);
+    DEV_ALERTS.set(user.id, []);
+    return res.json({ id: user.id, email });
+  }
   const client = getPgClient();
   try {
     await client.connect();
@@ -385,6 +440,13 @@ app.post('/rpc/signup', async (req, res) => {
 app.post('/rpc/login', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'missing email' });
+  if (DEV_AUTH) {
+    // emulate rpc_get_user
+    if (!DEV_USER_BY_EMAIL.has(email)) return res.status(404).json({ error: 'not found' });
+    const token = DEV_USER_BY_EMAIL.get(email);
+    const u = DEV_TOKENS.get(token);
+    return res.json({ id: u.id, email: u.email });
+  }
   const client = getPgClient();
   try {
     await client.connect();
@@ -428,5 +490,36 @@ app.post('/dev/create-test-user', async (req, res) => {
   } catch (e) {
     console.error('[DEV] create-test-user error', e.message || e);
     return res.status(500).json({ error: 'create test user failed' });
+  }
+});
+
+// Dev helper: export in-memory dev users/alerts to Postgres (DEV_AUTH only)
+app.post('/dev/export-dev-data', async (req, res) => {
+  if (!DEV_AUTH) return res.status(403).json({ error: 'only available in DEV_AUTH' });
+  const summaries = [];
+  try {
+    // Create users via RPC if available
+    for (const [token, user] of DEV_TOKENS.entries()) {
+      const email = user.email;
+      const created = await dbCreateUser(email);
+      summaries.push({ email, created: !!created });
+    }
+    // Insert alerts
+    const client = getPgClient();
+    await client.connect();
+    for (const [userId, alerts] of DEV_ALERTS.entries()) {
+      for (const a of alerts) {
+        try {
+          await client.query('INSERT INTO public.alerts (user_id, symbol, threshold, direction) VALUES ($1,$2,$3,$4)', [userId, a.symbol, a.threshold, a.direction]);
+        } catch (e) {
+          console.error('[DEV EXPORT] alert insert error for', userId, e.message || e);
+        }
+      }
+    }
+    await client.end();
+    return res.json({ ok: true, summary: summaries });
+  } catch (e) {
+    console.error('[DEV EXPORT] failed', e.message || e);
+    return res.status(500).json({ error: 'export failed', details: e.message || e });
   }
 });

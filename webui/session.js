@@ -8,8 +8,8 @@ export function createSession(timeoutMs = 30000){
     active = true;
   };
   let onTimeout = null;
-  const start = (cb)=>{ onTimeout = cb; reset(); if (typeof window !== 'undefined' && window.addEventListener){ window.addEventListener('mousemove', reset); window.addEventListener('keydown', reset); window.addEventListener('click', reset); } };
-  const stop = ()=>{ if(timer) clearTimeout(timer); if (typeof window !== 'undefined' && window.removeEventListener){ window.removeEventListener('mousemove', reset); window.removeEventListener('keydown', reset); window.removeEventListener('click', reset); } active=false; };
+  const start = (cb)=>{ onTimeout = cb; reset(); if (typeof globalThis !== 'undefined' && globalThis.window && globalThis.window.addEventListener){ globalThis.window.addEventListener('mousemove', reset); globalThis.window.addEventListener('keydown', reset); globalThis.window.addEventListener('click', reset); } };
+  const stop = ()=>{ if(timer) clearTimeout(timer); if (typeof globalThis !== 'undefined' && globalThis.window && globalThis.window.removeEventListener){ globalThis.window.removeEventListener('mousemove', reset); globalThis.window.removeEventListener('keydown', reset); globalThis.window.removeEventListener('click', reset); } active=false; };
   const isActive = ()=>active;
   return { start, stop, reset, isActive };
 }

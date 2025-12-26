@@ -1,44 +1,127 @@
-const loginPanel = document.getElementById("login-panel");
-const mainPanel = document.getElementById("main-panel");
-const loginForm = document.getElementById("login-form");
-const signupForm = document.getElementById("signup-form");
-const tabLogin = document.getElementById("tab-login");
-const tabSignup = document.getElementById("tab-signup");
-const currentUserSpan = document.getElementById("current-user");
 
-const loadingEl = document.getElementById("loading");
-const errorEl = document.getElementById("error");
-const tableBody = document.getElementById("assets-body");
-const searchInput = document.getElementById("search");
+// Getters for DOM elements and globals (exported for tests)
+export function getLoginPanel() {
+  return typeof global !== 'undefined' && global.loginPanel
+    ? global.loginPanel
+    : (typeof window !== 'undefined' && window.loginPanel)
+      ? window.loginPanel
+      : (typeof document !== 'undefined' ? document.getElementById('login-panel') : null);
+}
 
-const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
-const tabSections = Array.from(document.querySelectorAll('.tab-section'));
-const chartSelect = document.getElementById('chart-crypto');
-const chartPeriod = document.getElementById('chart-period');
-const alertForm = document.getElementById('alert-form');
-const alertsList = document.getElementById('alerts-list');
+export function getMainPanel() {
+  return typeof global !== 'undefined' && global.mainPanel
+    ? global.mainPanel
+    : (typeof window !== 'undefined' && window.mainPanel)
+      ? window.mainPanel
+      : (typeof document !== 'undefined' ? document.getElementById('main-panel') : null);
+}
+
+export function getLoginForm() {
+  return typeof document !== 'undefined' ? document.getElementById('login-form') : null;
+}
+
+export function getSignupForm() {
+  return typeof document !== 'undefined' ? document.getElementById('signup-form') : null;
+}
+
+export function getTabLogin() {
+  return typeof document !== 'undefined' ? document.getElementById('tab-login') : null;
+}
+
+export function getTabSignup() {
+  return typeof document !== 'undefined' ? document.getElementById('tab-signup') : null;
+}
+
+export function getCurrentUserSpan() {
+  return typeof global !== 'undefined' && global.currentUserSpan
+    ? global.currentUserSpan
+    : (typeof window !== 'undefined' && window.currentUserSpan)
+      ? window.currentUserSpan
+      : (typeof document !== 'undefined' ? document.getElementById('current-user') : null);
+}
+
+export function getLoadingEl() {
+  return typeof document !== 'undefined' ? document.getElementById('loading') : null;
+}
+
+export function getErrorEl() {
+  return typeof document !== 'undefined' ? document.getElementById('error') : null;
+}
+
+export function getTableBody() {
+  return typeof document !== 'undefined' ? document.getElementById('assets-body') : null;
+}
+
+export function getSearchInput() {
+  return typeof document !== 'undefined' ? document.getElementById('search') : null;
+}
+
+export function getChartSelect() {
+  return typeof document !== 'undefined' ? document.getElementById('chart-crypto') : null;
+}
+
+export function getChartPeriod() {
+  return typeof document !== 'undefined' ? document.getElementById('chart-period') : null;
+}
+
+export function getAlertForm() {
+  return typeof document !== 'undefined' ? document.getElementById('alert-form') : null;
+}
+
+export function getAlertsListEl() {
+  return typeof document !== 'undefined' ? document.getElementById('alerts-list') : null;
+}
 
 let allAssets = [];
-let authToken = localStorage.getItem('supabase_token') || null;
-let authUser = localStorage.getItem('supabase_user') ? JSON.parse(localStorage.getItem('supabase_user')) : null;
 
-// Session inactivity
+// auth token and user read from localStorage at import-time but exposed via helpers
+let authToken = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_token')) || null;
+
+let authUser = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_user')) ? JSON.parse(localStorage.getItem('supabase_user')) : null;
+
+export function getAuthToken() {
+  return (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_token')) || authToken;
+}
+
+export function setAuthToken(tok) {
+  authToken = tok;
+  if (typeof localStorage !== 'undefined') {
+    if (tok) localStorage.setItem('supabase_token', tok);
+    else localStorage.removeItem('supabase_token');
+  }
+}
+
+export function getAuthUser() {
+  return (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_user')) ? JSON.parse(localStorage.getItem('supabase_user')) : authUser;
+}
+
+export function setAuthUser(user) {
+  authUser = user;
+  if (typeof localStorage !== 'undefined') {
+    if (user) localStorage.setItem('supabase_user', JSON.stringify(user));
+    else localStorage.removeItem('supabase_user');
+  }
+}
+
+
+// Gère l'import dynamique du module session (pour tests)
+function importSessionModule(){ try { window.Session = window.Session || null; } catch(e){} }
 importSessionModule();
 let session = null;
 
-function importSessionModule(){
-  // dynamic import for session helper used in tests
-  try { window.Session = window.Session || null; } catch(e){}
-}
+// For tests: allow setting assets from outside
+export function setAllAssets(arr){ allAssets = Array.isArray(arr) ? arr : []; }
 
-function formatNumber(num) {
+
+// Formate un nombre pour affichage (2 décimales, FR)
+export function formatNumber(num) {
   if (num === null || num === undefined) return "-";
-  return Number(num).toLocaleString("fr-FR", {
-    maximumFractionDigits: 2,
-  });
+  return Number(num).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 }
 
-function formatPercent(num) {
+
+// Formate un pourcentage pour affichage (badge up/down)
+export function formatPercent(num) {
   if (num === null || num === undefined) return "-";
   const value = Number(num);
   const cls = value >= 0 ? "badge-up" : "badge-down";
@@ -46,11 +129,18 @@ function formatPercent(num) {
   return `<span class="${cls}">${formatted}</span>`;
 }
 
-function renderTable(assets) {
-  tableBody.innerHTML = "";
+// Affiche le tableau des assets
+export function renderTable(assets, targetTableBody) {
+
+  const body = targetTableBody || getTableBody();
+
+  if (!body) return;
+
+  body.innerHTML = "";
 
   assets.forEach((asset, index) => {
-    const tr = document.createElement("tr");
+
+    const tr = typeof document !== 'undefined' ? document.createElement("tr") : { innerHTML: '' };
 
     const changeHtml = formatPercent(asset.changePercent24Hr);
 
@@ -67,55 +157,124 @@ function renderTable(assets) {
       <td>${asset.explorer ? `<a href="${asset.explorer}" target="_blank" rel="noreferrer">Lien</a>` : "-"}</td>
     `;
 
-    tableBody.appendChild(tr);
+    body.appendChild(tr);
+
   });
+
 }
 
-async function loadAssets() {
-  loadingEl.classList.remove("hidden");
-  errorEl.classList.add("hidden");
+export async function loadAssets() {
+
+  const loading = getLoadingEl();
+
+  const error = getErrorEl();
+
+  loading && loading.classList.remove("hidden");
+
+  error && error.classList.add("hidden");
 
   try {
+
     // IMPORTANT : cette URL doit être servie via http:// (npm run webui)
+
     // On passe par l'API servie par server.js pour éviter les soucis de CORS
+
     const response = await fetch("/api/assets");
+
     if (!response.ok) {
+
       throw new Error("HTTP " + response.status);
+
     }
+
     const data = await response.json();
+
     allAssets = Array.isArray(data) ? data : [];
+
     renderTable(allAssets);
+
     populateChartSelect(allAssets);
+
   } catch (err) {
+
     console.error("Erreur de chargement des assets", err);
-    errorEl.textContent = "Erreur de chargement des données (" + err.message + ")";
-    errorEl.classList.remove("hidden");
+
+    if (error) {
+
+      error.textContent = "Erreur de chargement des données (" + err.message + ")";
+
+      error.classList.remove("hidden");
+
+    }
+
   } finally {
-    loadingEl.classList.add("hidden");
+
+    loading && loading.classList.add("hidden");
+
   }
+
 }
 
-function populateChartSelect(assets){
-  if(!chartSelect) return;
-  chartSelect.innerHTML = '';
-  assets.slice(0,200).forEach(a => {
+// populate chart select with available assets
+export function populateChartSelect(assets) {
+
+  const sel = getChartSelect();
+
+  if (!sel) return;
+
+  sel.innerHTML = '';
+
+  assets.slice(0, 200).forEach(a => {
+
     const opt = document.createElement('option');
+
     opt.value = a.symbol;
+
     opt.textContent = `${a.symbol} — ${a.name}`;
-    chartSelect.appendChild(opt);
+
+    sel.appendChild(opt);
+
   });
+
 }
 
-// ---- Tabs handling ----
-function switchToTab(name){
-  tabButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-  tabSections.forEach(s => s.classList.toggle('hidden', s.id !== 'tab-'+name));
-}
-tabButtons.forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
 
-// ---- Chart.js setup ----
-let cryptoChart = null;
-function generateMockHistory(price, points){
+// Affiche l'onglet sélectionné
+// get tab buttons from globals or document
+export function getTabButtons() {
+
+  return typeof document !== 'undefined'
+
+    ? Array.from((global.tabButtons || window.tabButtons || document.querySelectorAll('.tab-btn')))
+
+    : [];
+
+}
+
+// get tab sections from globals or document
+export function getTabSections() {
+
+  return typeof document !== 'undefined'
+
+    ? Array.from((global.tabSections || window.tabSections || document.querySelectorAll('.tab-section')))
+
+    : [];
+
+}
+
+export function switchToTab(name) {
+
+  getTabButtons().forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+
+  getTabSections().forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + name));
+
+}
+
+if (typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
+
+
+// Génère un historique de prix fictif pour les graphiques
+export function generateMockHistory(price, points){
   const arr = [];
   let p = Number(price) || 1;
   for(let i=0;i<points;i++){
@@ -126,162 +285,313 @@ function generateMockHistory(price, points){
   return arr;
 }
 
-function renderChartFor(symbol, period){
+// Affiche le graphique d'une crypto
+export function renderChartFor(symbol, period) {
+
+  if (typeof document === 'undefined') return;
+
   const asset = allAssets.find(a => a.symbol === symbol) || allAssets[0];
-  if(!asset) return;
+
+  if (!asset) return;
+
   const now = Date.now();
-  const points = period === '24h' ? 24 : period === '7d' ? 7*24 : 30*24;
+
+  const points = period === '24h' ? 24 : period === '7d' ? 7 * 24 : 30 * 24;
+
   const history = generateMockHistory(asset.priceUsd || 1, points);
-  const labels = history.map((_,i) => new Date(now - ((history.length - i -1) * 60*60*1000)).toLocaleString());
 
-  const ctx = document.getElementById('crypto-chart').getContext('2d');
-  if(cryptoChart) cryptoChart.destroy();
-  cryptoChart = new Chart(ctx, {
+  const labels = history.map((_, i) => new Date(now - ((history.length - i - 1) * 60 * 60 * 1000)).toLocaleString());
+
+  const canvas = document.getElementById('crypto-chart');
+
+  const ctx = canvas.getContext('2d');
+
+  if (window.cryptoChart && typeof window.cryptoChart.destroy === 'function') window.cryptoChart.destroy();
+
+  window.cryptoChart = new Chart(ctx, {
+
     type: 'line',
+
     data: {
+
       labels,
+
       datasets: [{ label: `${asset.symbol} price (USD)`, data: history, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.12)', tension: 0.15 }]
+
     },
-    options: { plugins: { legend: { display: true } }, scales: { x: { display: true }, y: { display: true } } }
+
+    options: {
+
+      plugins: { legend: { display: true } },
+
+      scales: { x: { display: true }, y: { display: true } }
+
+    }
+
   });
+
 }
 
-if(chartSelect){
-  chartSelect.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
-  chartPeriod.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
+if (getChartSelect()) {
+
+  getChartSelect().addEventListener('change', () => renderChartFor(getChartSelect().value, getChartPeriod().value));
+
+  getChartPeriod().addEventListener('change', () => renderChartFor(getChartSelect().value, getChartPeriod().value));
+
 }
 
-// ---- Alerts UI ----
-if(alertForm){
-  alertForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if(!authToken) return alert('Vous devez être connecté pour créer une alerte');
-    const symbol = document.getElementById('alert-symbol').value.trim();
-    const threshold = Number(document.getElementById('alert-threshold').value);
-    const direction = document.getElementById('alert-direction').value;
-    try{
-      const r = await fetch('/api/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+authToken }, body: JSON.stringify({ symbol, threshold, direction }) });
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const json = await r.json();
-      appendAlertToList(json);
-    }catch(err){ console.error('create alert', err); alert('Erreur création alerte'); }
+
+
+// Crée une alerte via l'API (exportée pour tests et usage UI)
+// create an alert via the API
+export async function createAlert(symbol, threshold, direction) {
+
+  const token = getAuthToken();
+
+  if (!token) throw new Error('Non authentifié');
+
+  const r = await fetch('/api/alerts', {
+
+    method: 'POST',
+
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+
+    body: JSON.stringify({ symbol, threshold, direction })
+
   });
+
+  if (!r.ok) {
+
+    const j = await r.json().catch(() => ({}));
+
+    throw new Error('Erreur: ' + (j.error || r.status));
+
+  }
+
+  return await r.json();
+
 }
 
-function appendAlertToList(a){
-  const div = document.createElement('div');
-  div.className = 'alert-item';
-  div.textContent = `${a.symbol} ${a.direction} ${a.threshold}`;
-  alertsList.appendChild(div);
-}
 
-// ---- Auth flow ----
-function showLoggedIn(){
-  loginPanel.classList.add('hidden');
-  mainPanel.classList.remove('hidden');
-  currentUserSpan.textContent = authUser ? (authUser.email || authUser.id) : 'connecté';
+// Affiche le panneau principal après connexion
+// show main panel after login
+export function showLoggedIn() {
+
+  const loginPanel_ = getLoginPanel();
+
+  const mainPanel_ = getMainPanel();
+
+  const currentUserSpan_ = getCurrentUserSpan();
+
+  if (!loginPanel_ || !mainPanel_) return;
+
+  loginPanel_.classList.add('hidden');
+
+  mainPanel_.classList.remove('hidden');
+
+  if (currentUserSpan_) currentUserSpan_.textContent = getAuthUser() ? (getAuthUser().email || getAuthUser().id) : 'connecté';
+
   switchToTab('table');
-  // start session inactivity
-  startSessionTimer();
+
+  if (typeof startSessionTimer === 'function') startSessionTimer();
+
 }
 
-function showLoggedOut(){
-  loginPanel.classList.remove('hidden');
-  mainPanel.classList.add('hidden');
-  currentUserSpan.textContent = '';
-  stopSessionTimer();
+// Affiche le panneau de connexion après déconnexion
+// show login panel after logout
+export function showLoggedOut() {
+
+  const loginPanel_ = getLoginPanel();
+
+  const mainPanel_ = getMainPanel();
+
+  const currentUserSpan_ = getCurrentUserSpan();
+
+  if (!loginPanel_ || !mainPanel_) return;
+
+  loginPanel_.classList.remove('hidden');
+
+  mainPanel_.classList.add('hidden');
+
+  if (currentUserSpan_) currentUserSpan_.textContent = '';
+
+  if (typeof stopSessionTimer === 'function') stopSessionTimer();
+
 }
 
-async function doLogin(email, password){
-  const r = await fetch('/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+// Effectue la connexion utilisateur
+// perform login and store token/user
+export async function doLogin(email, password) {
+
+  const r = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+
   const json = await r.json();
-  if(!r.ok) throw new Error(json?.error || JSON.stringify(json));
-  // save token if present
-  authToken = json?.access_token || json?.token || null;
-  if(authToken) localStorage.setItem('supabase_token', authToken);
-  authUser = json?.user || { email };
-  localStorage.setItem('supabase_user', JSON.stringify(authUser));
+
+  if (!r.ok) throw new Error(json?.error || JSON.stringify(json));
+
+  const token = json?.access_token || json?.token || null;
+
+  setAuthToken(token);
+
+  const user = json?.user || { email };
+
+  setAuthUser(user);
+
   showLoggedIn();
+
 }
 
-async function doSignup(email, password){
-  const r = await fetch('/auth/signup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
+// Effectue l'inscription utilisateur
+// perform signup then login
+export async function doSignup(email, password) {
+
+  const r = await fetch('/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+
   const json = await r.json();
-  if(!r.ok) throw new Error(json?.error || JSON.stringify(json));
-  // after signup, try login
+
+  if (!r.ok) throw new Error(json?.error || JSON.stringify(json));
+
   return doLogin(email, password);
+
 }
 
 
 
-// ---- Session inactivity (30s) ----
+
+// Gère la déconnexion automatique après 30s d'inactivité
 let inactivityTimeout = null;
-function resetInactivity(){
-  if(inactivityTimeout) clearTimeout(inactivityTimeout);
-  inactivityTimeout = setTimeout(()=>{
-    // auto logout after 30s
-    doLogout(true);
-  }, 30 * 1000);
+// inactivity management
+export function resetInactivity() {
+
+  if (inactivityTimeout) clearTimeout(inactivityTimeout);
+
+  inactivityTimeout = setTimeout(() => { doLogout(true); }, 30 * 1000);
+
 }
 
-function startSessionTimer(){
-  ['mousemove','keydown','click','scroll'].forEach(evt => window.addEventListener(evt, resetInactivity));
+export function startSessionTimer() {
+
+  if (typeof window === 'undefined') return;
+
+  ['mousemove', 'keydown', 'click', 'scroll'].forEach(evt => window.addEventListener(evt, resetInactivity));
+
   resetInactivity();
-}
-function stopSessionTimer(){
-  ['mousemove','keydown','click','scroll'].forEach(evt => window.removeEventListener(evt, resetInactivity));
-  if(inactivityTimeout) clearTimeout(inactivityTimeout);
+
 }
 
-function doLogout(auto=false){
-  authToken = null; authUser = null; localStorage.removeItem('supabase_token'); localStorage.removeItem('supabase_user');
+export function stopSessionTimer() {
+
+  if (typeof window === 'undefined') return;
+
+  ['mousemove', 'keydown', 'click', 'scroll'].forEach(evt => window.removeEventListener(evt, resetInactivity));
+
+  if (inactivityTimeout) clearTimeout(inactivityTimeout);
+
+}
+
+export function doLogout(auto = false) {
+
+  setAuthToken(null);
+
+  setAuthUser(null);
+
+  if (typeof localStorage !== 'undefined') {
+
+    localStorage.removeItem('supabase_token');
+
+    localStorage.removeItem('supabase_user');
+
+  }
+
   showLoggedOut();
-  if(auto) alert('Vous avez été déconnecté pour cause d\'inactivité (30s)');
+
+  if (auto && typeof alert !== 'undefined') alert('Vous avez été déconnecté pour cause d\'inactivité (30s)');
+
 }
 
-// Init
-if(authToken){ showLoggedIn(); loadAssets(); } else { showLoggedOut(); }
 
-// ensure search filters
-searchInput && searchInput.addEventListener('input', (e)=>{
-  const q = e.target.value.trim().toLowerCase();
-  renderTable(allAssets.filter(a => a.name?.toLowerCase().includes(q) || a.symbol?.toLowerCase().includes(q)));
-});
 
-/* Alerts: create / list / delete using protected API */
+// Initialise l'UI et la session (à appeler explicitement dans l'UI)
+// initialize UI and session
+export function initApp() {
 
-async function loadAlerts(){
-  if (!authToken) { alertsList.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>'; return; }
+  if (typeof window === 'undefined') return;
+
+  if (getAuthToken()) {
+
+    showLoggedIn();
+
+    loadAssets();
+
+    loadAlerts && loadAlerts();
+
+  } else {
+
+    showLoggedOut();
+
+  }
+
+  const search = getSearchInput();
+
+  if (search) {
+
+    search.addEventListener('input', (e) => {
+
+      const q = e.target.value.trim().toLowerCase();
+
+      renderTable(allAssets.filter(a => a.name?.toLowerCase().includes(q) || a.symbol?.toLowerCase().includes(q)));
+
+    });
+
+  }
+
+}
+
+// Exporte les fonctions principales pour les tests
+
+
+// get the alerts-list element safely
+export function getAlertsList() {
+
+  if (typeof document !== 'undefined') {
+
+    return document.getElementById('alerts-list') || { innerHTML: '', appendChild: () => {} };
+
+  }
+
+  if (typeof global !== 'undefined' && global.alertsList) return global.alertsList;
+
+  return { innerHTML: '', appendChild: () => {} };
+
+}
+
+export async function loadAlerts(){
+  const alertsListEl = getAlertsList();
+  if (!authToken) { alertsListEl.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>'; return; }
   try{
     const r = await fetch('/api/alerts', { headers: { Authorization: `Bearer ${authToken}` } });
-    if (!r.ok) { alertsList.innerHTML = `<div class="status error">Erreur: ${r.status}</div>`; return; }
+    if (!r.ok) { alertsListEl.innerHTML = `<div class="status error">Erreur: ${r.status}</div>`; return; }
     const data = await r.json();
-    if (!Array.isArray(data) || data.length===0) { alertsList.innerHTML = '<div class="status">Aucune alerte.</div>'; return; }
-    alertsList.innerHTML = '';
+    if (!Array.isArray(data) || data.length===0) { alertsListEl.innerHTML = '<div class="status">Aucune alerte.</div>'; return; }
+    alertsListEl.innerHTML = '';
     data.forEach(a => {
       const div = document.createElement('div');
       div.className = 'alert-item';
       div.innerHTML = `<strong>${a.symbol}</strong> ${a.direction} ${a.threshold} <button data-id="${a.id}" class="alert-delete">Supprimer</button>`;
-      alertsList.appendChild(div);
+      alertsListEl.appendChild(div);
     });
     // attach delete handlers
     document.querySelectorAll('.alert-delete').forEach(btn => btn.addEventListener('click', async (e)=>{
       const id = e.currentTarget.getAttribute('data-id');
       await deleteAlert(id);
     }));
-  }catch(err){ alertsList.innerHTML = `<div class="status error">${err.message}</div>`; }
+  }catch(err){ alertsListEl.innerHTML = `<div class="status error">${err.message}</div>`; }
 }
 
-async function createAlert(symbol, threshold, direction){
-  if (!authToken) return alert('Non authentifié');
-  try{
-    const r = await fetch('/api/alerts', { method: 'POST', headers: { 'Content-Type':'application/json', Authorization: `Bearer ${authToken}` }, body: JSON.stringify({ symbol, threshold, direction }) });
-    if (!r.ok) { const j = await r.json().catch(()=>({})); return alert('Erreur: '+(j.error||r.status)); }
-    await loadAlerts();
-  }catch(e){ alert('Erreur: '+e.message); }
-}
 
-async function deleteAlert(id){
+// (supprimé: doublon createAlert)
+
+export async function deleteAlert(id){
   if (!authToken) return alert('Non authentifié');
   try{
     const r = await fetch(`/api/alerts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${authToken}` } });
@@ -290,14 +600,27 @@ async function deleteAlert(id){
   }catch(e){ alert('Erreur: '+e.message); }
 }
 
-alertForm?.addEventListener('submit', (e)=>{
+function handleAlertFormSubmit(e){
   e.preventDefault();
   const sym = document.getElementById('alert-symbol').value.trim();
   const thr = Number(document.getElementById('alert-threshold').value);
   const dir = document.getElementById('alert-direction').value;
   if(!sym || !thr) return alert('Remplis les champs');
   createAlert(sym, thr, dir);
-});
+}
+
+export function attachImportTimeListeners(){
+  try{
+    if(typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
+    if(chartSelect){
+      chartSelect.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
+      chartPeriod.addEventListener('change', () => renderChartFor(chartSelect.value, chartPeriod.value));
+    }
+    alertForm?.addEventListener('submit', handleAlertFormSubmit);
+    tabLogin?.addEventListener('click', showLogin);
+    tabSignup?.addEventListener('click', showSignup);
+  }catch(e){ /* defensive */ }
+}
 
 // load alerts after successful login / session restore
 if (authToken) loadAlerts();
@@ -305,22 +628,22 @@ if (authToken) loadAlerts();
 // (search input handler is defined earlier)
 
 // Simulation de connexion : on accepte n'importe quoi et on passe à la suite
-function showLogin() {
+export function showLogin() {
   loginForm.classList.remove('hidden');
   signupForm.classList.add('hidden');
   tabLogin.classList.add('active');
   tabSignup.classList.remove('active');
 }
 
-function showSignup() {
+export function showSignup() {
   loginForm.classList.add('hidden');
   signupForm.classList.remove('hidden');
   tabLogin.classList.remove('active');
   tabSignup.classList.add('active');
 }
 
-tabLogin?.addEventListener('click', showLogin);
-tabSignup?.addEventListener('click', showSignup);
+// attach listeners at import-time (keeps previous behavior)
+attachImportTimeListeners();
 
 async function handleLoginSubmit(e) {
   e.preventDefault();
@@ -367,7 +690,7 @@ async function handleSignupSubmit(e) {
 loginForm?.addEventListener('submit', handleLoginSubmit);
 signupForm?.addEventListener('submit', handleSignupSubmit);
 
-async function loadCurrentUser() {
+export async function loadCurrentUser() {
   if (!authToken) return;
   try {
     const r = await fetch('/auth/me', { headers: { Authorization: `Bearer ${authToken}` } });
@@ -377,10 +700,5 @@ async function loadCurrentUser() {
   } catch(e) { console.warn('get user failed', e.message); }
 }
 
-// restore session
-if (authToken) {
-  loginPanel.classList.add('hidden');
-  mainPanel.classList.remove('hidden');
-  loadCurrentUser();
-  loadAssets();
-}
+
+// (Plus de code d'exécution automatique à l'import)

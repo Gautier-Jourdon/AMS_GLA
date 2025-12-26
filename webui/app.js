@@ -248,23 +248,29 @@ export function populateChartSelect(assets) {
 // Affiche l'onglet sélectionné
 // get tab buttons from globals or document
 export function getTabButtons() {
+  if (typeof document === 'undefined') return [];
 
-  return typeof document !== 'undefined'
+  const src = (typeof global !== 'undefined' && global.tabButtons)
+    ? global.tabButtons
+    : (typeof window !== 'undefined' && window.tabButtons)
+      ? window.tabButtons
+      : document.querySelectorAll('.tab-btn');
 
-    ? Array.from((global.tabButtons || window.tabButtons || document.querySelectorAll('.tab-btn')))
-
-    : [];
+  return Array.from(src || []);
 
 }
 
 // get tab sections from globals or document
 export function getTabSections() {
+  if (typeof document === 'undefined') return [];
 
-  return typeof document !== 'undefined'
+  const src = (typeof global !== 'undefined' && global.tabSections)
+    ? global.tabSections
+    : (typeof window !== 'undefined' && window.tabSections)
+      ? window.tabSections
+      : document.querySelectorAll('.tab-section');
 
-    ? Array.from((global.tabSections || window.tabSections || document.querySelectorAll('.tab-section')))
-
-    : [];
+  return Array.from(src || []);
 
 }
 
@@ -551,6 +557,62 @@ export function initApp() {
 
   }
 
+  // initialize UI enhancements (ticker, theme) in a test-safe way
+  try {
+    initUIEnhancements();
+  } catch (e) { /* non-fatal */ }
+
+}
+
+// UI enhancements: theme toggle and small simulated market ticker
+let _tickerInterval = null;
+export function startTicker(intervalMs = 2500) {
+  if (typeof document === 'undefined') return;
+  const el = document.getElementById('market-ticker');
+  if (!el) return;
+  stopTicker();
+  const tick = () => {
+    const pool = Array.isArray(allAssets) && allAssets.length ? allAssets.slice(0, 8) : [];
+    if (!pool.length) { el.textContent = 'Marché: aucune donnée'; return; }
+    // create a compact list of items
+    el.innerHTML = '';
+    pool.forEach(a => {
+      const span = document.createElement('span');
+      span.className = 'ticker-item';
+      const delta = (Math.random() - 0.5) * 2; // percent
+      const sign = delta >= 0 ? '+' : '';
+      span.textContent = `${a.symbol} ${sign}${delta.toFixed(2)}% ${formatNumber(a.priceUsd)}`;
+      el.appendChild(span);
+    });
+  };
+  tick();
+  _tickerInterval = setInterval(tick, intervalMs);
+}
+
+export function stopTicker(){ if (_tickerInterval) { clearInterval(_tickerInterval); _tickerInterval = null; } }
+
+export function toggleTheme() {
+  if (typeof document === 'undefined') return;
+  const body = document.body;
+  const isLight = body.classList.toggle('theme-light');
+  try { localStorage.setItem('theme_light', isLight ? '1' : '0'); } catch (e) {}
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.setAttribute('aria-pressed', String(Boolean(isLight)));
+}
+
+export function initUIEnhancements() {
+  if (typeof document === 'undefined') return;
+  // theme from storage
+  try {
+    const pref = localStorage.getItem('theme_light');
+    if (pref === '1') document.body.classList.add('theme-light');
+  } catch (e) {}
+
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.addEventListener('click', toggleTheme);
+
+  // start a soft market ticker
+  startTicker();
 }
 
 // Exporte les fonctions principales pour les tests
@@ -740,11 +802,23 @@ async function handleLoginSubmit(e) {
 
   try {
 
-    const resp = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+    const resp = await fetch('/auth/login', {
+      method: 'POST', headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email,
+        password
+      })
+    });
 
     const json = await resp.json();
 
-    if (!resp.ok) { errEl.textContent = json.error || JSON.stringify(json); errEl.classList.remove('hidden'); return; }
+    if (!resp.ok) {
+      errEl.textContent = json.error || JSON.stringify(json);
+      errEl.classList.remove('hidden');
+      return;
+    }
 
     // Store access token
 
@@ -770,7 +844,8 @@ async function handleLoginSubmit(e) {
 
   } catch (err) {
 
-    errEl.textContent = err.message; errEl.classList.remove('hidden');
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
 
   }
 
@@ -783,16 +858,34 @@ async function handleSignupSubmit(e) {
   const confirm = document.getElementById('su_password_confirm').value;
   const errEl = document.getElementById('signup-error');
   errEl.classList.add('hidden');
-  if (password !== confirm) { errEl.textContent = 'Les mots de passe ne correspondent pas'; errEl.classList.remove('hidden'); return; }
+  if (password !== confirm) {
+    errEl.textContent = 'Les mots de passe ne correspondent pas';
+    errEl.classList.remove('hidden');
+    return;
+  }
   try {
-    const resp = await fetch('/auth/signup', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ email, password }) });
+    const resp = await fetch('/auth/signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json' },
+        body: JSON.stringify({
+          email,
+          password
+        })
+    });
     const json = await resp.json();
-    if (!resp.ok) { errEl.textContent = json.error || JSON.stringify(json); errEl.classList.remove('hidden'); return; }
+    if (!resp.ok) {
+      errEl.textContent = json.error || JSON.stringify(json);
+      errEl.classList.remove('hidden');
+      return;
+    }
     // signup may require confirmation; inform user
-    errEl.textContent = 'Inscription réussie. Vérifie ta boîte mail si confirmation requise.'; errEl.classList.remove('hidden');
+    errEl.textContent = 'Inscription réussie. Vérifie ta boîte mail si confirmation requise.';
+    errEl.classList.remove('hidden');
     showLogin();
   } catch (err) {
-    errEl.textContent = err.message; errEl.classList.remove('hidden');
+    errEl.textContent = err.message;
+    errEl.classList.remove('hidden');
   }
 }
 
@@ -804,7 +897,11 @@ export async function loadCurrentUser() {
 
   try {
 
-    const opts = getAuthToken() ? { headers: { Authorization: `Bearer ${getAuthToken()}` } } : {};
+    const opts = getAuthToken() ? { 
+      headers: {
+        Authorization: `Bearer ${getAuthToken()}` 
+      }
+    } : {};
 
     const r = await fetch('/auth/me', opts);
 
@@ -826,7 +923,9 @@ export async function loadCurrentUser() {
 
     if (span) span.textContent = `Connecté en tant ${user.email || user.id || 'Utilisateur'}`;
 
-  } catch (e) { console.warn('get user failed', e.message); }
+  } catch (e) {
+    console.warn('get user failed', e.message);
+  }
 
 }
 

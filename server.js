@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Client } from "pg";
+import fs from 'fs/promises';
 import fetch from "node-fetch";
 import expressPkg from 'express';
 const { json } = expressPkg;
@@ -18,6 +19,13 @@ app.use(json());
 app.use(express.static(__dirname));
 
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+
+const DEV_AUTH = (process.env.DEV_AUTH === 'true') || (process.env.NODE_ENV === 'development');
+
+// In-memory map of dev tokens -> user info (only for DEV_AUTH mode)
+const DEV_TOKENS = new Map();
+// In-memory alerts per user for DEV_AUTH mode
+const DEV_ALERTS = new Map();
 
 let _cachedSupabaseUrl = null;
 async function resolveSupabaseUrl() {
@@ -60,6 +68,21 @@ async function resolveSupabaseUrl() {
 async function verifyAuth(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: 'missing authorization token' });
+  // DEV_AUTH accepts any Bearer dev-token for local development
+  if (DEV_AUTH) {
+    try {
+      if (typeof auth === 'string' && auth.startsWith('Bearer')) {
+        const tok = auth.replace(/^Bearer\s+/i, '').trim();
+        if (DEV_TOKENS.has(tok)) {
+          req.user = DEV_TOKENS.get(tok);
+          return next();
+        }
+        // if token unknown, still allow but set email to provided value in header if present
+        req.user = { id: 'dev', email: 'dev@local' };
+        return next();
+      }
+    } catch (e) { /* continue to normal flow */ }
+  }
   try {
     const base = await resolveSupabaseUrl();
     const url = base + '/auth/v1/user';
@@ -74,41 +97,97 @@ async function verifyAuth(req, res, next) {
   }
 }
 
-app.get("/api/assets", (req, res) => {
-  // Try to serve assets from Postgres first
-  (async () => {
-    const client = new Client({
-      host: process.env.PGHOST || "localhost",
-      port: Number(process.env.PGPORT || process.env.PG_PORT || 5433),
-      user: process.env.PGUSER || process.env.PG_USER || "postgres",
-      password: process.env.PGPASSWORD || process.env.PG_PASSWORD || "postgres",
-      database: process.env.PGDATABASE || process.env.PG_DATABASE || "postgres"
-    });
+// Helper to create configured Postgres client (centralized defaults)
+function getPgClient() {
+  const host = process.env.PGHOST || 'localhost';
+  const port = Number(process.env.PGPORT || process.env.PG_PORT || 5432);
+  const user = process.env.PGUSER || 'postgres';
+  const password = process.env.PGPASSWORD || 'postgres';
+  const database = process.env.PGDATABASE || 'postgres';
+  return new Client({ host, port, user, password, database });
+}
 
+// DB helpers used as fallback when Supabase is not available
+async function dbGetUserByEmail(email) {
+  const client = getPgClient();
+  try {
+    await client.connect();
+    const r = await client.query('select * from public.rpc_get_user($1)', [email]);
+    await client.end();
+    if (r.rowCount === 0) return null;
+    return r.rows[0];
+  } catch (e) {
+    try { await client.end(); } catch (e) {}
+    console.error('[DB] get user error', e.message || e);
+    return null;
+  }
+}
+
+async function dbCreateUser(email) {
+  const client = getPgClient();
+  try {
+    await client.connect();
+    const r = await client.query('select * from public.rpc_create_user($1)', [email]);
+    await client.end();
+    if (r.rowCount === 0) return null;
+    return r.rows[0];
+  } catch (e) {
+    try { await client.end(); } catch (e) {}
+    console.error('[DB] create user error', e.message || e);
+    return null;
+  }
+}
+
+app.get("/api/assets", async (req, res) => {
+  // In DEV_AUTH mode serve static assets immediately to avoid Postgres connections
+  if (DEV_AUTH) {
     try {
-      await client.connect();
-      const result = await client.query('SELECT id, symbol, name, rank, price_usd, change_percent_24hr, market_cap_usd, volume_usd_24hr, supply, max_supply, explorer FROM public.assets ORDER BY rank NULLS LAST LIMIT 2000');
-      const rows = result.rows.map(r => ({
-        id: r.id,
-        symbol: r.symbol,
-        name: r.name,
-        rank: r.rank,
-        priceUsd: r.price_usd,
-        changePercent24Hr: r.change_percent_24hr,
-        marketCapUsd: r.market_cap_usd,
-        volumeUsd24Hr: r.volume_usd_24hr,
-        supply: r.supply,
-        maxSupply: r.max_supply,
-        explorer: r.explorer
-      }));
-      await client.end();
-      return res.json(rows);
-    } catch (err) {
-      try { await client.end(); } catch (e) {}
-      console.error('[API] Erreur DB:', err);
+      const staticPath = path.join(__dirname, 'collector', 'data', 'assets.json');
+      const txt = await fs.readFile(staticPath, 'utf8');
+      const data = JSON.parse(txt);
+      console.log('[API] DEV_AUTH: serving static assets.json fallback');
+      return res.json(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('[API] DEV static fallback failed', e.message || e);
+      return res.status(503).json({ error: 'assets not available (dev)', details: e && (e.stack || e.message || e) });
+    }
+  }
+
+  // Try to serve assets from Postgres first
+  const client = getPgClient();
+  try {
+    await client.connect();
+    const result = await client.query('SELECT id, symbol, name, rank, price_usd, change_percent_24hr, market_cap_usd, volume_usd_24hr, supply, max_supply, explorer FROM public.assets ORDER BY rank NULLS LAST LIMIT 2000');
+    const rows = result.rows.map(r => ({
+      id: r.id,
+      symbol: r.symbol,
+      name: r.name,
+      rank: r.rank,
+      priceUsd: r.price_usd,
+      changePercent24Hr: r.change_percent_24hr,
+      marketCapUsd: r.market_cap_usd,
+      volumeUsd24Hr: r.volume_usd_24hr,
+      supply: r.supply,
+      maxSupply: r.max_supply,
+      explorer: r.explorer
+    }));
+    await client.end();
+    return res.json(rows);
+  } catch (err) {
+    try { await client.end(); } catch (e) {}
+    console.error('[API] Erreur DB:', err.message || err);
+    // Attempt to serve static assets.json as a graceful fallback for local dev
+    try {
+      const staticPath = path.join(__dirname, 'collector', 'data', 'assets.json');
+      const txt = await fs.readFile(staticPath, 'utf8');
+      const data = JSON.parse(txt);
+      console.log('[API] serving static assets.json fallback');
+      return res.json(Array.isArray(data) ? data : []);
+    } catch (e2) {
+      console.error('[API] static fallback failed', e2.message || e2);
       return res.status(503).json({ error: 'database unavailable', details: err && (err.stack || err.message || err) });
     }
-  })();
+  }
 });
 
   // Alerts endpoints (protected)
@@ -116,13 +195,15 @@ app.get("/api/assets", (req, res) => {
     const { symbol, threshold, direction } = req.body || {};
     if (!symbol || !threshold || !direction) return res.status(400).json({ error: 'missing fields' });
     const userId = req.user?.id || 'unknown';
-    const client = new Client({
-      host: process.env.PGHOST || 'localhost',
-      port: Number(process.env.PGPORT || 54322),
-      user: process.env.PGUSER || 'postgres',
-      password: process.env.PGPASSWORD || 'postgres',
-      database: process.env.PGDATABASE || 'postgres'
-    });
+    if (DEV_AUTH) {
+      const arr = DEV_ALERTS.get(userId) || [];
+      const id = 'dev-alert-' + Date.now();
+      const obj = { id, user_id: userId, symbol, threshold, direction, created_at: new Date().toISOString() };
+      arr.unshift(obj);
+      DEV_ALERTS.set(userId, arr);
+      return res.status(201).json(obj);
+    }
+    const client = getPgClient();
     try {
       await client.connect();
       const ins = await client.query('INSERT INTO public.alerts (user_id, symbol, threshold, direction) VALUES ($1,$2,$3,$4) RETURNING *', [userId, symbol, threshold, direction]);
@@ -137,7 +218,10 @@ app.get("/api/assets", (req, res) => {
 
   app.get('/api/alerts', verifyAuth, async (req, res) => {
     const userId = req.user?.id || 'unknown';
-    const client = new Client({ host: process.env.PGHOST || 'localhost', port: Number(process.env.PGPORT || 54322), user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD || 'postgres', database: process.env.PGDATABASE || 'postgres' });
+    if (DEV_AUTH) {
+      return res.json(DEV_ALERTS.get(userId) || []);
+    }
+    const client = getPgClient();
     try {
       await client.connect();
       const rows = await client.query('SELECT id, symbol, threshold, direction, created_at FROM public.alerts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
@@ -153,7 +237,15 @@ app.get("/api/assets", (req, res) => {
   app.delete('/api/alerts/:id', verifyAuth, async (req, res) => {
     const id = req.params.id;
     const userId = req.user?.id || 'unknown';
-    const client = new Client({ host: process.env.PGHOST || 'localhost', port: Number(process.env.PGPORT || 54322), user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD || 'postgres', database: process.env.PGDATABASE || 'postgres' });
+    if (DEV_AUTH) {
+      const arr = DEV_ALERTS.get(userId) || [];
+      const idx = arr.findIndex(a => a.id === id);
+      if (idx === -1) return res.status(404).json({ error: 'not found' });
+      arr.splice(idx, 1);
+      DEV_ALERTS.set(userId, arr);
+      return res.json({ ok: true });
+    }
+    const client = getPgClient();
     try {
       await client.connect();
       // Ensure ownership
@@ -178,6 +270,14 @@ app.listen(PORT, () => {
 app.post('/auth/signup', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'missing email or password' });
+  if (DEV_AUTH) {
+    // permissive dev signup: return a dev token without DB
+    const token = 'dev-token-' + Date.now();
+    const user = { id: 'dev-' + Date.now(), email };
+    DEV_TOKENS.set(token, user);
+    console.log('[AUTH] DEV signup for', email);
+    return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user });
+  }
   try {
     const base = await resolveSupabaseUrl();
     const url = base + '/auth/v1/signup';
@@ -200,13 +300,33 @@ app.post('/auth/signup', async (req, res) => {
     return res.status(r.status).json(json);
   } catch (e) {
     console.error('[AUTH] signup error', e.message);
-    return res.status(500).json({ error: 'signup failed' });
+    // Supabase unreachable: try DB RPC fallback
+    try {
+      const user = await dbCreateUser(email);
+      if (!user) return res.status(500).json({ error: 'signup failed (db)' });
+      // return a simple dev token and user info
+      const token = 'dev-token-' + Date.now();
+      const uobj = { id: user.id || ('dev-' + Date.now()), email };
+      DEV_TOKENS.set(token, uobj);
+      return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user: uobj });
+    } catch (e2) {
+      console.error('[AUTH] signup fallback failed', e2.message || e2);
+      return res.status(500).json({ error: 'signup failed' });
+    }
   }
 });
 
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'missing email or password' });
+  if (DEV_AUTH) {
+    // permissive dev login: accept any credentials and return dev token
+    const token = 'dev-token-' + Date.now();
+    const user = { id: 'dev-' + Date.now(), email };
+    DEV_TOKENS.set(token, user);
+    console.log('[AUTH] DEV login for', email);
+    return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user });
+  }
   try {
     const base = await resolveSupabaseUrl();
     const url = base + '/auth/v1/token?grant_type=password';
@@ -229,7 +349,18 @@ app.post('/auth/login', async (req, res) => {
     return res.status(r.status).json(json);
   } catch (e) {
     console.error('[AUTH] login error', e.message);
-    return res.status(500).json({ error: 'login failed' });
+    // Supabase unreachable: try DB lookup fallback
+    try {
+      const user = await dbGetUserByEmail(email);
+      if (!user) return res.status(401).json({ error: 'invalid credentials (fallback)' });
+      const token = 'dev-token-' + Date.now();
+      const uobj = { id: user.id || ('dev-' + Date.now()), email };
+      DEV_TOKENS.set(token, uobj);
+      return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user: uobj });
+    } catch (e2) {
+      console.error('[AUTH] login fallback failed', e2.message || e2);
+      return res.status(500).json({ error: 'login failed' });
+    }
   }
 });
 
@@ -237,7 +368,7 @@ app.post('/auth/login', async (req, res) => {
 app.post('/rpc/signup', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'missing email' });
-  const client = new Client({ host: process.env.PGHOST || 'localhost', port: Number(process.env.PGPORT || 54322), user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD || 'postgres', database: process.env.PGDATABASE || 'postgres' });
+  const client = getPgClient();
   try {
     await client.connect();
     const r = await client.query('select * from public.rpc_create_user($1)', [email]);
@@ -254,7 +385,7 @@ app.post('/rpc/signup', async (req, res) => {
 app.post('/rpc/login', async (req, res) => {
   const { email } = req.body || {};
   if (!email) return res.status(400).json({ error: 'missing email' });
-  const client = new Client({ host: process.env.PGHOST || 'localhost', port: Number(process.env.PGPORT || 54322), user: process.env.PGUSER || 'postgres', password: process.env.PGPASSWORD || 'postgres', database: process.env.PGDATABASE || 'postgres' });
+  const client = getPgClient();
   try {
     await client.connect();
     const r = await client.query('select * from public.rpc_get_user($1)', [email]);
@@ -271,4 +402,31 @@ app.post('/rpc/login', async (req, res) => {
 // Endpoint to return current user info (requires Authorization header)
 app.get('/auth/me', verifyAuth, (req, res) => {
   return res.json(req.user || {});
+});
+
+// Dev helper: create a test user (in-memory when DEV_AUTH, otherwise try DB)
+app.post('/dev/create-test-user', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'missing email' });
+  if (DEV_AUTH) {
+    const token = 'dev-token-' + Date.now();
+    const user = { id: 'dev-' + Date.now(), email };
+    DEV_TOKENS.set(token, user);
+    DEV_ALERTS.set(user.id, []);
+    console.log('[DEV] created in-memory test user', email);
+    return res.json({ access_token: token, user });
+  }
+  // Not DEV_AUTH: attempt to create in DB and return a dev-token mapped to the created user
+  try {
+    const user = await dbCreateUser(email);
+    if (!user) return res.status(500).json({ error: 'could not create user' });
+    const token = 'dev-token-' + Date.now();
+    const uobj = { id: user.id || ('dev-' + Date.now()), email };
+    DEV_TOKENS.set(token, uobj);
+    DEV_ALERTS.set(uobj.id, []);
+    return res.json({ access_token: token, user: uobj });
+  } catch (e) {
+    console.error('[DEV] create-test-user error', e.message || e);
+    return res.status(500).json({ error: 'create test user failed' });
+  }
 });

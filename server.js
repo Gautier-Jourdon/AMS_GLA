@@ -8,6 +8,8 @@ import fetch from "node-fetch";
 import expressPkg from 'express';
 const { json } = expressPkg;
 import { createUser as authCreateUser, authenticateUser } from './backend/auth.js';
+import * as Wallet from './backend/wallet.js';
+import logger from './backend/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,24 +49,24 @@ async function resolveSupabaseUrl() {
   for (const c of candidates) {
     try {
       const url = c.replace(/\/$/, '');
-      console.log('[SUPABASE] probing', url);
+      logger.debug('[SUPABASE] probing', { url });
       // ping root to see if the gateway responds
       const r = await fetch(url + '/', { method: 'GET', redirect: 'manual' });
-      console.log('[SUPABASE] probe', url, 'status', r.status);
+      logger.debug('[SUPABASE] probe', { url, status: r && r.status });
       // consider any response as available (200/302/404 are ok proxy responses)
       if (r && (r.status < 500)) {
         _cachedSupabaseUrl = url;
-        console.log('[SUPABASE] auto-detected SUPABASE_URL =', url);
+        logger.info('[SUPABASE] auto-detected SUPABASE_URL = ' + url);
         return url;
       }
     } catch (e) {
-      console.log('[SUPABASE] probe failed', c, e.message?.toString?.() || e.toString());
+      logger.debug('[SUPABASE] probe failed', { candidate: c, err: e && (e.message || String(e)) });
       // continue to next candidate
     }
   }
   // fallback default
-  console.warn('[SUPABASE] Could not auto-detect SUPABASE_URL; using http://localhost:54321');
-  _cachedSupabaseUrl = 'http://localhost:54321';
+  logger.warn('[SUPABASE] Could not auto-detect SUPABASE_URL; using http://localhost:55321');
+  _cachedSupabaseUrl = 'http://localhost:55321';
   return _cachedSupabaseUrl;
 }
 
@@ -78,10 +80,12 @@ async function verifyAuth(req, res, next) {
         const tok = auth.replace(/^Bearer\s+/i, '').trim();
         if (DEV_TOKENS.has(tok)) {
           req.user = DEV_TOKENS.get(tok);
+          logger.debug('[AUTH] DEV token accepted', { user: req.user.email || req.user.id });
           return next();
         }
         // if token unknown, still allow but set email to provided value in header if present
         req.user = { id: 'dev', email: 'dev@local' };
+        logger.debug('[AUTH] DEV token unknown - allowing as dev placeholder');
         return next();
       }
     } catch (e) { /* continue to normal flow */ }
@@ -95,15 +99,25 @@ async function verifyAuth(req, res, next) {
     req.user = user;
     return next();
   } catch (e) {
-    console.error('[AUTH] Error validating token', e.message);
+    logger.error('[AUTH] Error validating token', { err: e && (e.message || String(e)) });
     return res.status(500).json({ error: 'auth verification failed' });
   }
 }
 
+// request logging middleware (sanitized)
+app.use((req, res, next) => {
+  try {
+    const safeHeaders = { ...req.headers };
+    if (safeHeaders.authorization) safeHeaders.authorization = '[REDACTED]';
+    logger.info('HTTP ' + req.method + ' ' + req.path, { headers: safeHeaders, query: req.query });
+  } catch (e) { logger.debug('request-logger failed', { err: e.message || e }); }
+  return next();
+});
+
 // Helper to create configured Postgres client (centralized defaults)
 function getPgClient() {
   const host = process.env.PGHOST || 'localhost';
-  const port = Number(process.env.PGPORT || process.env.PG_PORT || 5432);
+  const port = Number(process.env.PGPORT || process.env.PG_PORT || 5433);
   const user = process.env.PGUSER || 'postgres';
   const password = process.env.PGPASSWORD || 'postgres';
   const database = process.env.PGDATABASE || 'postgres';
@@ -291,10 +305,10 @@ export async function runStartupChecks() {
     const client = getPgClient();
     await client.connect();
     await client.end();
-    console.log('[PG] Postgres reachable');
+    logger.info('[PG] Postgres reachable');
   } catch (e) {
-    console.warn('[PG] Postgres connection test failed:', e.message || e);
-    console.warn('[PG] If you expect Postgres to be available, check PGHOST/PGPORT/PGUSER/PGPASSWORD env vars');
+    logger.warn('[PG] Postgres connection test failed', { err: e && (e.message || String(e)) });
+    logger.warn('[PG] Check PGHOST/PGPORT/PGUSER/PGPASSWORD env vars');
   }
 }
 
@@ -402,6 +416,219 @@ app.post('/auth/login', async (req, res) => {
       return res.status(500).json({ error: 'login failed' });
     }
   }
+});
+
+// Wallet endpoints
+app.post('/api/wallet/create', verifyAuth, async (req, res) =>
+{
+
+  const userId = req.user?.id || 'unknown';
+
+  try
+  {
+
+    const w = await Wallet.createWalletFor(userId, req.body?.initialCash || 10000);
+
+    return res.json(w);
+
+  }
+
+  catch (e)
+  {
+
+    console.error('[WALLET] create error', e.message || e);
+
+    return res.status(500).json({ error: 'wallet create failed' });
+
+  }
+
+});
+
+app.get('/api/wallet/value', verifyAuth, async (req, res) =>
+{
+
+  const userId = req.user?.id || 'unknown';
+
+  try
+
+  {
+
+    const w = await Wallet.getWalletFor(userId);
+
+    const syms = Object.keys(w.holdings || {});
+
+    const priceMap = {};
+
+    if (syms.length)
+
+    {
+
+      try
+
+      {
+
+        const client = getPgClient();
+
+        await client.connect();
+
+        const r = await client.query('SELECT symbol, price_usd FROM public.assets WHERE symbol = ANY($1)', [syms]);
+
+        await client.end();
+
+        for (const row of r.rows) priceMap[row.symbol] = row.price_usd;
+
+      }
+
+      catch (e)
+
+      {
+
+        try
+
+        {
+
+          const staticPath = path.join(__dirname, 'collector', 'data', 'assets.json');
+
+          const txt = await fs.readFile(staticPath, 'utf8');
+
+          const assets = JSON.parse(txt);
+
+          for (const a of assets || []) if (syms.includes(a.symbol) || syms.includes(a.id)) priceMap[a.symbol || a.id] = a.priceUsd || a.price_usd;
+
+        }
+
+        catch (e2) { /* ignore */ }
+
+      }
+
+    }
+
+    const val = await Wallet.getWalletValue(userId, priceMap);
+
+    return res.json(val);
+
+  }
+
+  catch (e)
+
+  {
+
+    console.error('[WALLET] value error', e.message || e);
+
+    return res.status(500).json({ error: 'value failed' });
+
+  }
+
+});
+
+app.get('/api/wallet/history', verifyAuth, async (req, res) =>
+{
+
+  const userId = req.user?.id || 'unknown';
+
+  try
+
+  {
+
+    const h = await Wallet.getHistory(userId);
+
+    return res.json(h || []);
+
+  }
+
+  catch (e)
+
+  {
+
+    console.error('[WALLET] history error', e.message || e);
+
+    return res.status(500).json({ error: 'history failed' });
+
+  }
+
+});
+{
+
+  const userId = req.user?.id || 'unknown';
+
+  const { symbol, side, amountUsd } = req.body || {};
+
+  if (!symbol || !side || !amountUsd) return res.status(400).json({ error: 'missing fields' });
+
+  try
+  {
+
+    // try to get price from local assets.json fallback
+    const staticPath = path.join(__dirname, 'collector', 'data', 'assets.json');
+
+    let price = null;
+
+    try
+    {
+
+      const txt = await fs.readFile(staticPath, 'utf8');
+
+      const assets = JSON.parse(txt);
+
+      const a = (Array.isArray(assets) ? assets.find(x => x.symbol === symbol || x.id === symbol) : null) || null;
+
+      price = a ? (a.priceUsd || a.price_usd || null) : null;
+
+    }
+
+    catch (e)
+    {
+
+      price = null;
+
+    }
+
+    if (!price) return res.status(400).json({ error: 'price not available for symbol' });
+
+    const qty = Number((Number(amountUsd) / Number(price)) || 0);
+
+    if (qty <= 0) return res.status(400).json({ error: 'invalid amount' });
+
+    const rec = await Wallet.recordTrade(userId, { symbol, side, qty, priceUsd: Number(price), amountUsd: Number(amountUsd) });
+
+    return res.json(rec);
+
+  }
+
+  catch (e)
+  {
+
+    console.error('[WALLET] trade error', e.message || e);
+
+    return res.status(500).json({ error: 'trade failed' });
+
+  }
+
+});
+
+app.get('/api/wallet/history', verifyAuth, async (req, res) =>
+{
+
+  const userId = req.user?.id || 'unknown';
+
+  try
+  {
+
+    const w = await Wallet.getWalletFor(userId);
+
+    return res.json(w.history || []);
+
+  }
+
+  catch (e)
+  {
+
+    console.error('[WALLET] history error', e.message || e);
+
+    return res.status(500).json({ error: 'history failed' });
+
+  }
+
 });
 
 // RPC endpoints that call DB functions directly (useful for local dev)

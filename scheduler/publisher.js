@@ -1,5 +1,7 @@
+
 import amqp from "amqplib";
 import cron from "node-cron";
+import logger from '../backend/logger.js';
 
 const RABBIT_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
@@ -21,14 +23,14 @@ async function connect()
 
     );
 
-    console.log("Scheduler connecté à RabbitMQ");
+    logger.info("Scheduler connecté à RabbitMQ", { url: RABBIT_URL });
 
   }
 
   catch (err)
   {
 
-    console.error("Erreur connexion RabbitMQ:", err.message);
+    logger.error("Erreur connexion RabbitMQ", { err: err && (err.message || String(err)) });
 
     setTimeout(connect, 3000);
 
@@ -41,13 +43,9 @@ let counter = 0;
 function publishJob()
 {
 
-  if (!channel)
-  {
-
-    console.warn("Channel non prêt, job ignoré");
-
+  if (!channel) {
+    logger.warn("Channel non prêt, job ignoré");
     return;
-
   }
 
   const job = {
@@ -61,16 +59,11 @@ function publishJob()
   };
 
   channel.sendToQueue(
-
     "tasks",
-
     Buffer.from(JSON.stringify(job)),
-
     { persistent: true }
-
   );
-
-  console.log("Job publié:", job.id);
+  logger.info("Job publié", { jobId: job.id });
 
 }
 

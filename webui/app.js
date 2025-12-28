@@ -280,6 +280,8 @@ export function switchToTab(name) {
 
   getTabSections().forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + name));
 
+  try { if (name === 'wallet' && typeof loadWallet === 'function') loadWallet(); } catch (e) {}
+
 }
 
 if (typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
@@ -614,6 +616,131 @@ export function initUIEnhancements() {
   // start a soft market ticker
   startTicker();
 }
+
+// Wallet UI helpers
+export function getWalletCashEl() {
+  return typeof document !== 'undefined' ? document.getElementById('wallet-cash') : null;
+}
+
+export function getWalletHoldingsEl() {
+  return typeof document !== 'undefined' ? document.getElementById('wallet-holdings') : null;
+}
+
+export function getWalletHistoryEl() {
+  return typeof document !== 'undefined' ? document.getElementById('wallet-history') : null;
+}
+
+export async function loadWallet() {
+
+  if (!getAuthToken()) return;
+
+  try {
+
+    const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+
+    if (!r.ok) return;
+
+    const w = await r.json();
+
+    renderWallet(w);
+
+    const hr = await fetch('/api/wallet/history', { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+
+    if (hr && hr.ok) {
+
+      const h = await hr.json();
+
+      renderWalletHistory(h);
+
+    }
+
+  } catch (e) { console.warn('wallet load failed', e.message); }
+
+}
+
+export function renderWallet(w) {
+
+  const cashEl = getWalletCashEl();
+
+  const holdEl = getWalletHoldingsEl();
+
+  if (cashEl) cashEl.textContent = w?.cash != null ? Number(w.cash).toFixed(2) : '-';
+
+  if (!holdEl) return;
+
+  holdEl.innerHTML = '';
+
+  const h = w?.holdings || {};
+
+  const keys = Object.keys(h);
+
+  if (!keys.length) { holdEl.textContent = 'Aucune position'; return; }
+
+  keys.forEach(sym => {
+
+    const div = document.createElement('div');
+
+    div.textContent = `${sym} : ${Number(h[sym]).toFixed(8)}`;
+
+    holdEl.appendChild(div);
+
+  });
+
+}
+
+export function renderWalletHistory(h) {
+
+  const el = getWalletHistoryEl();
+
+  if (!el) return;
+
+  if (!Array.isArray(h) || h.length === 0) { el.innerHTML = '<div class="status">Aucun trade</div>'; return; }
+
+  el.innerHTML = '';
+
+  h.forEach(t => {
+
+    const d = document.createElement('div');
+
+    d.className = 'wallet-trade';
+
+    d.textContent = `${t.side.toUpperCase()} ${t.symbol} ${Number(t.qty).toFixed(8)} @ ${Number(t.priceUsd).toFixed(2)} USD`;
+
+    el.appendChild(d);
+
+  });
+
+}
+
+// trade form
+const tradeForm = typeof document !== 'undefined' ? document.getElementById('wallet-trade-form') : null;
+if (tradeForm) tradeForm.addEventListener('submit', async (e) => {
+
+  e.preventDefault();
+
+  const sym = document.getElementById('w-symbol').value.trim();
+
+  const side = document.getElementById('w-side').value;
+
+  const amount = Number(document.getElementById('w-amount').value);
+
+  if (!sym || !side || !amount) return alert('Remplis les champs');
+
+  try {
+
+    const r = await fetch('/api/wallet/trade', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` }, body: JSON.stringify({ symbol: sym, side, amountUsd: amount }) });
+
+    const j = await r.json();
+
+    if (!r.ok) return alert('Erreur trade: ' + (j.error || r.status));
+
+    await loadWallet();
+
+    alert('Trade exécuté');
+
+  } catch (e) { alert('Erreur: ' + e.message); }
+
+});
 
 // Exporte les fonctions principales pour les tests
 

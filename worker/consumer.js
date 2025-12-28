@@ -1,4 +1,5 @@
 import amqp from "amqplib";
+import logger from '../backend/logger.js';
 
 const RABBIT_URL = process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
@@ -34,14 +35,14 @@ async function connect()
 
     );
 
-    console.log("Worker connecté et en écoute sur la queue 'tasks'");
+    logger.info("Worker connecté et en écoute sur la queue 'tasks'", { url: RABBIT_URL });
 
   }
 
   catch (err)
   {
 
-    console.error("Erreur connexion RabbitMQ (worker):", err.message);
+    logger.error("Erreur connexion RabbitMQ (worker)", { err: err && (err.message || String(err)) });
 
     setTimeout(connect, 3000);
 
@@ -54,13 +55,9 @@ async function processJob(job)
 
   await new Promise((res) => setTimeout(res, 1000));
 
-  if (Math.random() < 0.15)
-  {
-
+  if (Math.random() < 0.15) {
     throw new Error("Erreur simulée de traitement");
-
   }
-
   return { ok: true };
 
 }
@@ -104,20 +101,17 @@ async function handleMessage(msg)
   try
   {
 
-    console.log("Processing job", job.id, "retries:", retries);
-
+    logger.info('Processing job', { jobId: job.id, retries });
     await processJob(job);
-
     channel.ack(msg);
-
-    console.log("Job traité:", job.id);
+    logger.info('Job traité', { jobId: job.id });
 
   }
 
   catch (err)
   {
 
-    console.error("Erreur traitement job", job.id, err.message);
+    logger.error('Erreur traitement job', { jobId: job.id, err: err && (err.message || String(err)) });
 
     if (retries < 3)
     {
@@ -125,18 +119,12 @@ async function handleMessage(msg)
       const newHeaders = { ...headers, "x-retries": retries + 1 };
 
       channel.sendToQueue(
-
         "tasks",
-
         Buffer.from(JSON.stringify(job)),
-
         { persistent: true, headers: newHeaders }
-
       );
-
       channel.ack(msg);
-
-      console.log("Job re-publié pour retry:", job.id, "tries:", retries + 1);
+      logger.info('Job re-publié pour retry', { jobId: job.id, tries: retries + 1 });
 
     }
 
@@ -144,18 +132,12 @@ async function handleMessage(msg)
     {
 
       channel.sendToQueue(
-
         "failed_tasks",
-
         Buffer.from(JSON.stringify({ job, error: err.message, failedAt: Date.now() })),
-
         { persistent: true }
-
       );
-
       channel.ack(msg);
-
-      console.log("Job déplacé vers 'failed_tasks':", job.id);
+      logger.info("Job déplacé vers 'failed_tasks'", { jobId: job.id });
 
     }
 

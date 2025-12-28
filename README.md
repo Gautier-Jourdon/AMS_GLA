@@ -75,3 +75,16 @@ npm run scheduler
 ```
 
 L'interface de management de RabbitMQ est disponible sur `http://localhost:15672` (guest/guest).
+
+## Authentification et Portefeuille virtuel
+
+Endpoints principaux:
+- `POST /auth/signup` et `POST /auth/login` : auth basique (dev-friendly). Retourne `access_token`.
+- `GET /auth/me` : info utilisateur (JWT ou dev-token).
+- `POST /api/wallet/create` : crée un portefeuille virtuel (initial 10000 USD par défaut).
+- `GET /api/wallet` : récupère le portefeuille courant.
+- `POST /api/wallet/trade` : exécute un trade simulé `{ symbol, side, amountUsd }`.
+- `GET /api/wallet/history` : historique des trades.
+
+UI : onglet `Portefeuille` dans l'interface web. Connexion requise (dev-mode autorise tokens en mémoire).
+

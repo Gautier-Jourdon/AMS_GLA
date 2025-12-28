@@ -64,7 +64,9 @@
         <button class="tab-btn" data-tab="chart">Graphique</button>
         <button class="tab-btn" data-tab="detail">Détail</button>
         <button class="tab-btn" data-tab="alerts">Alertes</button>
+        <button class="tab-btn" data-tab="wallet">Portefeuille</button>
       </nav>
+      
       <section id="tab-table" class="tab-section visible">
         <input type="text" id="search" placeholder="Rechercher par nom ou symbole..." />
         <table id="assets-table">
@@ -122,6 +124,27 @@
           <button type="submit">Créer alerte</button>
         </form>
         <div id="alerts-list"></div>
+      </section>
+      <section id="tab-wallet" class="tab-section hidden">
+        <h2>Portefeuille virtuel</h2>
+        <div id="wallet-summary">
+          <div>Solde USD: <span id="wallet-cash">-</span></div>
+          <div>Valeur totale: <span id="wallet-value">-</span></div>
+          <div>Positions:</div>
+          <div id="wallet-holdings"></div>
+        </div>
+        <h3>Trader</h3>
+        <form id="wallet-trade-form">
+          <label for="w-symbol">Symbole</label>
+          <input id="w-symbol" placeholder="BTC" />
+          <label for="w-side">Type</label>
+          <select id="w-side"><option value="buy">Achat</option><option value="sell">Vente</option></select>
+          <label for="w-amount">Montant USD</label>
+          <input id="w-amount" type="number" step="any" />
+          <button type="submit">Exécuter</button>
+        </form>
+        <h3>Historique</h3>
+        <div id="wallet-history"></div>
       </section>
     </div>
   </div>

@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import fetch from "node-fetch";
 import expressPkg from 'express';
 const { json } = expressPkg;
+import { createUser as authCreateUser, authenticateUser } from './backend/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -340,13 +341,10 @@ app.post('/auth/signup', async (req, res) => {
     console.error('[AUTH] signup error', e.message);
     // Supabase unreachable: try DB RPC fallback
     try {
-      const user = await dbCreateUser(email);
-      if (!user) return res.status(500).json({ error: 'signup failed (db)' });
-      // return a simple dev token and user info
-      const token = 'dev-token-' + Date.now();
-      const uobj = { id: user.id || ('dev-' + Date.now()), email };
-      DEV_TOKENS.set(token, uobj);
-      return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user: uobj });
+      // Try creating user in our DB and issue JWT
+      const created = await authCreateUser(email, password || null);
+      if (!created) return res.status(500).json({ error: 'signup failed (db)' });
+      return res.json({ access_token: created.token, token_type: 'bearer', expires_in: 28800, user: created.user });
     } catch (e2) {
       console.error('[AUTH] signup fallback failed', e2.message || e2);
       return res.status(500).json({ error: 'signup failed' });
@@ -396,12 +394,9 @@ app.post('/auth/login', async (req, res) => {
     console.error('[AUTH] login error', e.message);
     // Supabase unreachable: try DB lookup fallback
     try {
-      const user = await dbGetUserByEmail(email);
-      if (!user) return res.status(401).json({ error: 'invalid credentials (fallback)' });
-      const token = 'dev-token-' + Date.now();
-      const uobj = { id: user.id || ('dev-' + Date.now()), email };
-      DEV_TOKENS.set(token, uobj);
-      return res.json({ access_token: token, token_type: 'bearer', expires_in: 3600, user: uobj });
+      const auth = await authenticateUser(email, password || null);
+      if (!auth) return res.status(401).json({ error: 'invalid credentials (fallback)' });
+      return res.json({ access_token: auth.token, token_type: 'bearer', expires_in: 28800, user: auth.user });
     } catch (e2) {
       console.error('[AUTH] login fallback failed', e2.message || e2);
       return res.status(500).json({ error: 'login failed' });

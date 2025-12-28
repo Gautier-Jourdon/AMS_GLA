@@ -54,3 +54,24 @@ tests unitaires, intégration, performance et sécurité.
 ## Installation (à venir)
 
 J'ajouterai les instructions une fois les premiers modules mis en place.
+
+## Scheduler et RabbitMQ
+
+Ce dépôt inclut un exemple minimal de scheduler (publisher) et d'un worker (consumer)
+basés sur RabbitMQ et Node.js.
+
+Fichiers ajoutés :
+- `docker-compose.yml` : lance RabbitMQ (port 5672) et l'UI de management (15672).
+- `scheduler/publisher.js` : publie des jobs toutes les 30 secondes vers la queue `tasks`.
+- `worker/consumer.js` : consomme `tasks` avec `ack`, `prefetch=1` et réessais basiques.
+
+Démarrage local :
+
+```bash
+docker-compose up -d
+npm install
+npm run worker
+npm run scheduler
+```
+
+L'interface de management de RabbitMQ est disponible sur `http://localhost:15672` (guest/guest).

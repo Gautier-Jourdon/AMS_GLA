@@ -49,6 +49,31 @@ async function saveToPostgres(records) {
       console.warn('[PG] Warning inserting history:', e.message);
     }
 
+    // Simple alert evaluator: check alerts matching symbol and insert notification when threshold crossed
+    try {
+      const alertQueryText = `SELECT id, threshold, direction FROM public.alerts WHERE symbol = $1`;
+      const notifyInsert = `INSERT INTO public.alerts_notifications (alert_id, asset_id, symbol, price) VALUES ($1,$2,$3,$4)`;
+      for (const r of records) {
+        const resAlerts = await client.query(alertQueryText, [r.symbol]);
+        if (resAlerts.rowCount === 0) continue;
+        for (const a of resAlerts.rows) {
+          const th = Number(a.threshold);
+          const price = Number(r.price_usd || 0);
+          let fire = false;
+          if (a.direction === 'above' && price >= th) fire = true;
+          if (a.direction === 'below' && price <= th) fire = true;
+          if (fire) {
+            try {
+              await client.query(notifyInsert, [a.id, r.id, r.symbol, price]);
+              console.log('[ALERT] Fired alert', a.id, r.symbol, price);
+            } catch (e) { console.warn('[ALERT] notify insert failed', e.message); }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[ALERT] evaluator error', e.message);
+    }
+
     await client.end();
     console.log("[PG] Upsert réussi pour assets (count:", records.length, ")");
     return true;

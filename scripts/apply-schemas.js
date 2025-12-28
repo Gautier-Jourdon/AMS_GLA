@@ -1,3 +1,36 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { Client } from 'pg';
+
+async function main(){
+  const migrationsDir = path.join(process.cwd(), 'db', 'migrations');
+  const files = await fs.readdir(migrationsDir);
+  const sqlFiles = files.filter(f => f.endsWith('.sql')).sort();
+  const sql = await Promise.all(sqlFiles.map(f => fs.readFile(path.join(migrationsDir,f),'utf8')));
+
+  const client = new Client({
+    host: process.env.PGHOST || 'localhost',
+    port: Number(process.env.PGPORT || 5432),
+    user: process.env.PGUSER || 'postgres',
+    password: process.env.PGPASSWORD || 'postgres',
+    database: process.env.PGDATABASE || 'postgres'
+  });
+  try{
+    await client.connect();
+    for (const s of sql){
+      console.log('Applying SQL chunk...');
+      await client.query(s);
+    }
+    console.log('Migrations applied.');
+    await client.end();
+  }catch(e){
+    try{ await client.end(); }catch(e){}
+    console.error('Failed applying migrations', e.message || e);
+    process.exit(1);
+  }
+}
+
+if (process.argv[1].endsWith('apply-schemas.js')) main();
 #!/usr/bin/env node
 /* apply-schemas.js
    Executes all .sql files in supabase/schemas against a Postgres DB using `pg`.

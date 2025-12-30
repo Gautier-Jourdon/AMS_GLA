@@ -121,6 +121,7 @@ function getPgClient() {
   const user = process.env.PGUSER || 'postgres';
   const password = process.env.PGPASSWORD || 'postgres';
   const database = process.env.PGDATABASE || 'postgres';
+  try { logger.debug('[PG] getPgClient config', { host, port, user, database }); } catch(e){}
   return new Client({ host, port, user, password, database });
 }
 
@@ -307,8 +308,23 @@ export async function runStartupChecks() {
     await client.end();
     logger.info('[PG] Postgres reachable');
   } catch (e) {
-    logger.warn('[PG] Postgres connection test failed', { err: e && (e.message || String(e)) });
-    logger.warn('[PG] Check PGHOST/PGPORT/PGUSER/PGPASSWORD env vars');
+    // Detailed diagnostics: log full error and any AggregateError causes
+    try {
+      const details = {};
+      details.msg = e && (e.message || String(e));
+      if (e && e.stack) details.stack = e.stack;
+      // AggregateError may contain multiple errors
+      if (typeof AggregateError !== 'undefined' && e instanceof AggregateError) {
+        details.causes = [];
+        for (const it of e.errors || []) {
+          details.causes.push({ msg: it && (it.message || String(it)), stack: it && it.stack });
+        }
+      }
+      logger.error('[PG] Postgres connection test failed (detailed)', details);
+    } catch (logErr) {
+      logger.error('[PG] Postgres connection test failed (could not serialize error)', { err: logErr && (logErr.message || String(logErr)) });
+    }
+    logger.warn('[PG] Check PGHOST/PGPORT/PGUSER/PGPASSWORD env vars and that Postgres is reachable from this host');
   }
 }
 
@@ -547,7 +563,7 @@ app.get('/api/wallet/history', verifyAuth, async (req, res) =>
   }
 
 });
-{
+app.post('/api/wallet/trade', verifyAuth, async (req, res) => {
 
   const userId = req.user?.id || 'unknown';
 
@@ -603,32 +619,6 @@ app.get('/api/wallet/history', verifyAuth, async (req, res) =>
     return res.status(500).json({ error: 'trade failed' });
 
   }
-
-});
-
-app.get('/api/wallet/history', verifyAuth, async (req, res) =>
-{
-
-  const userId = req.user?.id || 'unknown';
-
-  try
-  {
-
-    const w = await Wallet.getWalletFor(userId);
-
-    return res.json(w.history || []);
-
-  }
-
-  catch (e)
-  {
-
-    console.error('[WALLET] history error', e.message || e);
-
-    return res.status(500).json({ error: 'history failed' });
-
-  }
-
 });
 
 // RPC endpoints that call DB functions directly (useful for local dev)
@@ -686,6 +676,22 @@ app.post('/rpc/login', async (req, res) => {
 // Endpoint to return current user info (requires Authorization header)
 app.get('/auth/me', verifyAuth, (req, res) => {
   return res.json(req.user || {});
+});
+
+// Debug endpoint to inspect environment (only when DEV_AUTH or DEBUG_ALLOW=1)
+app.get('/debug/env', (req, res) => {
+  if (!DEV_AUTH && process.env.DEBUG_ALLOW !== '1') return res.status(403).json({ error: 'forbidden' });
+  const env = {
+    PGHOST: process.env.PGHOST || null,
+    PGPORT: process.env.PGPORT || process.env.PG_PORT || null,
+    PGUSER: process.env.PGUSER || null,
+    PGDATABASE: process.env.PGDATABASE || null,
+    SUPABASE_URL: process.env.SUPABASE_URL || _cachedSupabaseUrl || null,
+    SUPABASE_KEY: process.env.SUPABASE_KEY ? '[REDACTED]' : null,
+    DEV_AUTH: !!DEV_AUTH,
+    LOG_LEVEL: process.env.LOG_LEVEL || null
+  };
+  return res.json(env);
 });
 
 // Dev helper: create a test user (in-memory when DEV_AUTH, otherwise try DB)

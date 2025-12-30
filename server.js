@@ -212,6 +212,9 @@ app.get("/api/assets", async (req, res) => {
   app.post('/api/alerts', verifyAuth, async (req, res) => {
     const { symbol, threshold, direction } = req.body || {};
     if (!symbol || !threshold || !direction) return res.status(400).json({ error: 'missing fields' });
+    try {
+      console.log('[API] /api/alerts request user:', JSON.stringify(req.user));
+    } catch (e) { console.log('[API] /api/alerts request user: <unserializable>'); }
     const userId = req.user?.id || 'unknown';
     if (DEV_AUTH) {
       const arr = DEV_ALERTS.get(userId) || [];
@@ -535,6 +538,18 @@ app.get('/api/wallet/value', verifyAuth, async (req, res) =>
 
   }
 
+});
+
+// Return wallet (cash + holdings) for the current user
+app.get('/api/wallet', verifyAuth, async (req, res) => {
+  const userId = req.user?.id || 'unknown';
+  try {
+    const w = await Wallet.getWalletFor(userId);
+    return res.json(w || { cash: 0, holdings: {}, history: [] });
+  } catch (e) {
+    console.error('[API] wallet get error', e && (e.message || e));
+    return res.status(500).json({ error: 'wallet error' });
+  }
 });
 
 app.get('/api/wallet/history', verifyAuth, async (req, res) =>

@@ -564,6 +564,85 @@ export function initApp() {
     initUIEnhancements();
   } catch (e) { /* non-fatal */ }
 
+  // wire auth UI (tabs, forms, logout)
+  try { wireAuthUI(); } catch (e) { /* non-fatal */ }
+
+}
+
+// Wire login/signup tabs and form handlers
+export function wireAuthUI() {
+  if (typeof document === 'undefined') return;
+
+  const tabLogin = document.getElementById('tab-login');
+  const tabSignup = document.getElementById('tab-signup');
+  const loginForm = getLoginForm();
+  const signupForm = getSignupForm();
+  const loginError = document.getElementById('login-error');
+  const signupError = document.getElementById('signup-error');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  function showLoginTab() {
+    if (tabLogin) tabLogin.classList.add('active');
+    if (tabSignup) tabSignup.classList.remove('active');
+    if (loginForm) loginForm.classList.remove('hidden');
+    if (signupForm) signupForm.classList.add('hidden');
+  }
+
+  function showSignupTab() {
+    if (tabSignup) tabSignup.classList.add('active');
+    if (tabLogin) tabLogin.classList.remove('active');
+    if (signupForm) signupForm.classList.remove('hidden');
+    if (loginForm) loginForm.classList.add('hidden');
+  }
+
+  if (tabLogin) tabLogin.addEventListener('click', (e) => { e.preventDefault(); showLoginTab(); });
+  if (tabSignup) tabSignup.addEventListener('click', (e) => { e.preventDefault(); showSignupTab(); });
+
+  if (loginForm) loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (loginError) { loginError.classList.add('hidden'); loginError.textContent = ''; }
+    const submitBtn = loginForm.querySelector('button[type="submit"]');
+    const email = (document.getElementById('email') || {}).value || '';
+    const password = (document.getElementById('password') || {}).value || '';
+    try {
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('btn-loading'); }
+      await doLogin(email.trim(), password);
+      // success: init app data
+      loadAssets();
+      loadAlerts && loadAlerts();
+    } catch (err) {
+      if (loginError) { loginError.textContent = err && err.message ? err.message : String(err); loginError.classList.remove('hidden'); }
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('btn-loading'); }
+    }
+  });
+
+  if (signupForm) signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (signupError) { signupError.classList.add('hidden'); signupError.textContent = ''; }
+    const submitBtn = signupForm.querySelector('button[type="submit"]');
+    const email = (document.getElementById('su_email') || {}).value || '';
+    const password = (document.getElementById('su_password') || {}).value || '';
+    const confirm = (document.getElementById('su_password_confirm') || {}).value || '';
+    if (password !== confirm) { if (signupError) { signupError.textContent = 'Les mots de passe ne correspondent pas'; signupError.classList.remove('hidden'); } return; }
+    try {
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('btn-loading'); }
+      await doSignup(email.trim(), password);
+      loadAssets();
+      loadAlerts && loadAlerts();
+    } catch (err) {
+      if (signupError) { signupError.textContent = err && err.message ? err.message : String(err); signupError.classList.remove('hidden'); }
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('btn-loading'); }
+    }
+  });
+
+  if (logoutBtn) logoutBtn.addEventListener('click', (e) => { e.preventDefault(); doLogout(false); });
+
+  // ensure initial tab state
+  const hasSignupVisible = signupForm && !signupForm.classList.contains('hidden');
+  if (hasSignupVisible) showSignupTab(); else showLoginTab();
+
 }
 
 // UI enhancements: theme toggle and small simulated market ticker

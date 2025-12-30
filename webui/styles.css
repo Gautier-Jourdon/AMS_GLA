@@ -62,6 +62,7 @@ body {
     0 20px 50px rgba(0,0,0,0.6),
     inset 0 1px 0 rgba(255,255,255,0.04);
   padding: 28px 32px;
+  transition: transform 240ms ease, box-shadow 240ms ease, opacity 200ms ease;
 }
 
 .panel-login {
@@ -76,6 +77,24 @@ body {
 .hidden {
   display: none;
 }
+
+.panel.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.panel-login,
+.panel-main {
+  transform: translateY(6px);
+  opacity: 0.98;
+}
+
+/* Smooth show/hide for tab sections */
+.tab-section {
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+.tab-section.hidden { opacity: 0; transform: translateY(6px); pointer-events: none; }
+.tab-section.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
 /* =========================
    TITLES
@@ -156,11 +175,36 @@ button[type="submit"] {
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 10px 30px rgba(99,102,241,0.35);
+  min-width: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 button[type="submit"]:hover {
   transform: translateY(-1px);
 }
+
+/* disabled / loading state */
+button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-loading::after {
+  content: '';
+  display: inline-block;
+  margin-left: 8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: rgba(255,255,255,0.95);
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* =========================
    TOP BAR
@@ -188,6 +232,16 @@ button[type="submit"]:hover {
   font-size: 0.85rem;
   white-space: nowrap;
 }
+
+#logout-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+#logout-btn:hover { color: white; background: rgba(255,255,255,0.02); }
 
 /* =========================
    TABS
@@ -247,6 +301,27 @@ button[type="submit"]:hover {
 
 #assets-table tbody tr:hover {
   background: rgba(255,255,255,0.035);
+}
+
+/* table zebra + compact */
+#assets-table tbody tr:nth-child(odd) { background: rgba(255,255,255,0.01); }
+#assets-table tbody td { vertical-align: middle; }
+
+/* Chart canvas responsiveness */
+#crypto-chart { max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 12px 40px rgba(2,6,23,0.6); }
+
+/* Wallet styles */
+#wallet-summary { display:flex; gap:20px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
+#wallet-summary div { background: rgba(255,255,255,0.02); padding:10px 12px; border-radius:8px; border:1px solid var(--border); }
+
+/* Alerts list tweaks */
+#alerts-list .alert-item { display:flex; justify-content:space-between; align-items:center; }
+.alert-delete { background: transparent; border: none; color: var(--danger); cursor: pointer; }
+
+/* small screens adjustments */
+@media (max-width: 480px) {
+  #assets-table thead { display: none; }
+  #assets-table tbody td { display: block; padding: 8px 6px; }
 }
 
 /* =========================

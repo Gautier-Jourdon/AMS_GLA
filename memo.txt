@@ -1,0 +1,32 @@
+DB Reset Memo
+=============
+Start: 2025-12-29
+Author: automated agent
+
+Purpose: Track progress of wiping and recreating Postgres DB, applying project schemas, and repopulating via collector.
+
+Steps run (append as executed):
+
+2025-12-29 18:xx: Started Supabase local stack via `npx supabase start`.
+	- DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+	- Container: supabase_db_AMS_GLA mapped host port 54322 -> container 5432
+2025-12-29 18:xx: Dropped and recreated `public` schema; applied SQL files from `supabase/schemas`.
+2025-12-29 18:xx: Updated `.env` and `collector/.env` to PGHOST=127.0.0.1 and PGPORT=54322.
+2025-12-29 18:xx: Ran `node collector/index.js` — Upsert succeeded: assets count = 1515.
+
+Final check:
+- 2025-12-29 18:xx: Started `node server.js` and confirmed the API responds at http://127.0.0.1:55321/ (see server logs).
+
+Commands run (summary):
+- `npx supabase start`
+- `docker exec -i supabase_db_AMS_GLA psql -U postgres -d postgres -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"`
+- Applied SQL files: alerts.sql, assets.sql, assets_history.sql, auth_profiles.sql, auth_rpc.sql
+- Updated `.env` and `collector/.env` to PGHOST=127.0.0.1 and PGPORT=54322
+- `node collector/index.js` (upsert 1515 assets)
+- `node server.js` (started)
+
+Notes / follow-ups:
+- Consider committing `.env` changes to a safe branch or revert if necessary (these are local dev settings).
+- If you want, I can commit the changes and push a branch with `memo.txt` and `.env` updates.
+
+

@@ -2,155 +2,230 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>AMS GLA - Assets Viewer</title>
+  <title>AMS GLA - Crypto Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
-    <div id="login-panel" class="panel panel-login visible">
-      <h1>AMS GLA - Connexion / Inscription</h1>
-      <div class="tabs">
-        <button id="tab-login" class="active">Connexion</button>
-        <button id="tab-signup">Inscription</button>
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">AMS</div>
+        <div class="brand-text">
+          <div class="title">AMS GLA</div>
+          <div class="subtitle">Cryptos & Assets</div>
+        </div>
       </div>
-      <div id="login-forms">
-        <form id="login-form">
-          <div>
-            <label for="email">Email</label>
-            <input id="email" type="email" required />
+      <div class="header-controls">
+        <div id="market-ticker" aria-live="polite" class="ticker">&nbsp;</div>
+        <div class="user-area">
+          <span id="current-user" class="current-user"></span>
+          <button id="logout-btn" class="btn ghost" title="Se déconnecter">Déconnexion</button>
+          <button id="theme-toggle" class="btn" title="Basculer thème" aria-pressed="false"><i class="fa fa-moon"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <div class="ad ad-left">PUBLICITÉ<br/>Crypto Ads</div>
+      <aside class="sidebar panel">
+        <nav class="nav">
+          <button class="tab-btn btn active" data-tab="table"><i class="fa fa-table"></i> Tableaux</button>
+          <button class="tab-btn btn" data-tab="chart"><i class="fa fa-chart-line"></i> Graphiques</button>
+          <button class="tab-btn btn" data-tab="detail"><i class="fa fa-circle-info"></i> Détails</button>
+          <button class="tab-btn btn" data-tab="alerts"><i class="fa fa-bell"></i> Alertes</button>
+          <button class="tab-btn btn" data-tab="wallet"><i class="fa fa-wallet"></i> Wallet</button>
+        </nav>
+        <div class="sidebar-note">Design modernisé • Interactif</div>
+      </aside>
+
+      <div class="ad ad-right">PUBLICITÉ<br/>Crypto Ads</div>
+
+      <section id="login-signin-panel" class="content">
+        <div id="auth-area">
+          <h1>Connexion / Inscription</h1>
+          <div class="tabs">
+            <button id="tab-login" class="btn ghost active">Connexion</button>
+            <button id="tab-signup" class="btn ghost">Inscription</button>
           </div>
-          <div>
-            <label for="password">Mot de passe</label>
-            <input id="password" type="password" required />
+
+          <div id="login-panel" class="panel panel-login">
+            <form id="login-form">
+              <div class="form-row">
+                <label for="email">Email</label>
+                <input id="email" type="email" required />
+              </div>
+              <div class="form-row">
+                <label for="password">Mot de passe</label>
+                <input id="password" type="password" required />
+              </div>
+              <div id="login-error" class="error hidden"></div>
+              <div class="form-row">
+                <button type="submit" class="btn primary">Se connecter</button>
+              </div>
+            </form>
           </div>
-          <div id="login-error" class="error hidden"></div>
-          <button type="submit">Se connecter</button>
-        </form>
-        <form id="signup-form" class="hidden">
-          <div>
-            <label for="su_email">Email</label>
-            <input id="su_email" type="email" required />
+
+          <div id="signup-panel" class="panel panel-login hidden">
+            <form id="signup-form">
+              <div class="form-row">
+                <label for="su_email">Email</label>
+                <input id="su_email" type="email" required />
+              </div>
+              <div class="form-row">
+                <label for="su_password">Mot de passe</label>
+                <input id="su_password" type="password" required />
+              </div>
+              <div class="form-row">
+                <label for="su_password_confirm">Confirmer mot de passe</label>
+                <input id="su_password_confirm" type="password" required />
+              </div>
+              <div id="signup-error" class="error hidden"></div>
+              <div class="form-row">
+                <button type="submit" class="btn primary">S'inscrire</button>
+              </div>
+            </form>
           </div>
-          <div>
-            <label for="su_password">Mot de passe</label>
-            <input id="su_password" type="password" required />
+        </div>
+        </div>
+
+        <div id="main-panel" class="panel panel-main hidden">
+          <div class="panel-grid">
+            <section id="tab-table" class="tab-section visible">
+              <div class="section-header">
+                <h2>Liste des actifs</h2>
+                <div class="controls">
+                  <input type="text" id="search" placeholder="Rechercher par nom ou symbole..." />
+                  <button id="refresh-assets" class="btn ghost"><i class="fa fa-sync-alt"></i></button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="assets-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Symbole</th>
+                      <th>Nom</th>
+                      <th>Prix (USD)</th>
+                      <th>Variation 24h</th>
+                      <th>Market Cap</th>
+                      <th>Volume 24h</th>
+                      <th>Supply</th>
+                      <th>Explorer</th>
+                    </tr>
+                  </thead>
+                  <tbody id="assets-body"></tbody>
+                </table>
+              </div>
+              <div id="loading" class="status">Chargement des données...</div>
+              <div id="error" class="status error hidden">Impossible de charger les données.</div>
+            </section>
+
+            <section id="tab-chart" class="tab-section hidden">
+              <div class="section-header">
+                <h2>Graphique du cours</h2>
+                <div class="chart-controls">
+                  <label for="chart-crypto">Crypto :</label>
+                  <select id="chart-crypto"></select>
+                  <label for="chart-period">Période :</label>
+                  <select id="chart-period">
+                    <option value="24h">24h</option>
+                    <option value="7d">7j</option>
+                    <option value="1m">1 mois</option>
+                  </select>
+                </div>
+              </div>
+              <canvas id="crypto-chart" width="800" height="400"></canvas>
+              <div class="calc" id="calc-panel">
+                <div class="calc-row">
+                  <div class="field"><label>Montant USD</label><input id="calc-amount" type="number" step="any" placeholder="100" /></div>
+                  <div class="field"><label>Quantité</label><input id="calc-qty" type="number" step="any" placeholder="(auto)" /></div>
+                  <div class="field"><label>Prix cible (USD)</label><input id="calc-target" type="number" step="any" placeholder="--" /></div>
+                  <button id="calc-swap" class="btn ghost">Basculer montant/qty</button>
+                </div>
+                <div class="calc-results" id="calc-results">Valeur actuelle: - · Valeur cible: - · Profit: - · ROI: -</div>
+                <div class="calc-hint">Cliquez sur le graphique pour fixer automatiquement le prix cible.</div>
+              </div>
+            </section>
+
+            <section id="tab-detail" class="tab-section hidden">
+              <h2>Détail</h2>
+              <div id="crypto-detail"></div>
+            </section>
+
+            <section id="tab-alerts" class="tab-section hidden">
+              <h2>Mes alertes</h2>
+              <form id="alert-form" class="alert-form">
+                <div class="form-row">
+                  <label for="alert-symbol">Symbole</label>
+                  <input id="alert-symbol" placeholder="BTC" required />
+                </div>
+                <div class="form-row">
+                  <label for="alert-threshold">Seuil (USD)</label>
+                  <input id="alert-threshold" type="number" step="any" min="0.0001" max="100000000000" required />
+                </div>
+                <div class="form-row">
+                  <label for="alert-direction">Direction</label>
+                  <select id="alert-direction"><option value="above">Au dessus</option><option value="below">En dessous</option></select>
+                </div>
+                <div class="form-row">
+                  <label for="alert-delivery">Livraison</label>
+                  <select id="alert-delivery"><option value="email">Email</option><option value="discord" disabled>Discord (non disponible)</option></select>
+                </div>
+                <div class="form-row">
+                  <button type="submit" class="btn primary">Créer</button>
+                </div>
+              </form>
+              <div id="alerts-list"></div>
+            </section>
+
+            <section id="tab-wallet" class="tab-section hidden">
+              <h2>Portefeuille virtuel</h2>
+              <div id="wallet-summary">
+                <div class="card">Solde USD: <span id="wallet-cash">-</span></div>
+                <div class="card">Valeur totale: <span id="wallet-value">-</span></div>
+              </div>
+              <div id="wallet-holdings"></div>
+              <h3>Trader</h3>
+              <form id="wallet-trade-form" class="wallet-form">
+                <select id="w-symbol"><option value="">-- choisir --</option></select>
+                <select id="w-side"><option value="buy">Achat</option><option value="sell">Vente</option></select>
+                <input id="w-amount" type="number" step="any" />
+                <button type="submit" class="btn primary">Exécuter</button>
+              </form>
+              <h3>Historique</h3>
+              <div id="wallet-history"></div>
+            </section>
           </div>
-          <div>
-            <label for="su_password_confirm">Confirmer mot de passe</label>
-            <input id="su_password_confirm" type="password" required />
-          </div>
-          <div id="signup-error" class="error hidden"></div>
-          <button type="submit">S'inscrire</button>
-        </form>
+        </div>
+      </section>
+    </main>
+
+    <div id="asset-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-content">
+        <button class="modal-close btn ghost" aria-label="Fermer">×</button>
+        <div id="modal-body"></div>
       </div>
     </div>
 
-    <div id="main-panel" class="panel panel-main hidden">
-      <header class="topbar">
-        <div>
-          <h1>AMS GLA - Crypto Dashboard</h1>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px">
-          <div id="market-ticker" aria-live="polite" style="min-width:260px">&nbsp;</div>
-          <div class="user-info">
-              <span id="current-user"></span>
-              <button id="logout-btn" title="Se déconnecter" style="margin-left:8px">Déconnexion</button>
-            </div>
-            <button id="theme-toggle" title="Basculer thème" aria-pressed="false">Thème</button>
-        </div>
-      </header>
-      <nav class="main-tabs">
-        <button class="tab-btn active" data-tab="table">Tableau</button>
-        <button class="tab-btn" data-tab="chart">Graphique</button>
-        <button class="tab-btn" data-tab="detail">Détail</button>
-        <button class="tab-btn" data-tab="alerts">Alertes</button>
-        <button class="tab-btn" data-tab="wallet">Portefeuille</button>
-      </nav>
-      
-      <section id="tab-table" class="tab-section visible">
-        <input type="text" id="search" placeholder="Rechercher par nom ou symbole..." />
-        <table id="assets-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Symbole</th>
-              <th>Nom</th>
-              <th>Prix (USD)</th>
-              <th>Variation 24h (%)</th>
-              <th>Market Cap (USD)</th>
-              <th>Volume 24h (USD)</th>
-              <th>Supply</th>
-              <th>Max Supply</th>
-              <th>Explorer</th>
-            </tr>
-          </thead>
-          <tbody id="assets-body">
-            <!-- Rempli dynamiquement par app.js -->
-          </tbody>
-        </table>
-        <div id="loading" class="status">Chargement des données...</div>
-        <div id="error" class="status error hidden">Impossible de charger les données.</div>
-      </section>
-      <section id="tab-chart" class="tab-section hidden">
-        <h2>Graphique du cours</h2>
-        <div class="chart-controls">
-          <label for="chart-crypto">Crypto :</label>
-          <select id="chart-crypto"></select>
-          <label for="chart-period">Période :</label>
-          <select id="chart-period">
-            <option value="24h">24h</option>
-            <option value="7d">7j</option>
-            <option value="1m">1 mois</option>
-          </select>
-        </div>
-        <canvas id="crypto-chart" width="800" height="400"></canvas>
-      </section>
-      <section id="tab-detail" class="tab-section hidden">
-        <h2>Détail de la cryptomonnaie</h2>
-        <div id="crypto-detail"></div>
-      </section>
-      <section id="tab-alerts" class="tab-section hidden">
-        <h2>Mes alertes</h2>
-        <form id="alert-form">
-          <label for="alert-symbol">Symbol</label>
-          <input id="alert-symbol" placeholder="BTC" />
-          <label for="alert-threshold">Seuil</label>
-          <input id="alert-threshold" type="number" step="any" />
-          <label for="alert-direction">Direction</label>
-          <select id="alert-direction">
-            <option value="above">Au dessus</option>
-            <option value="below">En dessous</option>
-          </select>
-          <button type="submit">Créer alerte</button>
-        </form>
-        <div id="alerts-list"></div>
-      </section>
-      <section id="tab-wallet" class="tab-section hidden">
-        <h2>Portefeuille virtuel</h2>
-        <div id="wallet-summary">
-          <div>Solde USD: <span id="wallet-cash">-</span></div>
-          <div>Valeur totale: <span id="wallet-value">-</span></div>
-          <div>Positions:</div>
-          <div id="wallet-holdings"></div>
-        </div>
-        <h3>Trader</h3>
-        <form id="wallet-trade-form">
-          <label for="w-symbol">Symbole</label>
-          <input id="w-symbol" placeholder="BTC" />
-          <label for="w-side">Type</label>
-          <select id="w-side"><option value="buy">Achat</option><option value="sell">Vente</option></select>
-          <label for="w-amount">Montant USD</label>
-          <input id="w-amount" type="number" step="any" />
-          <button type="submit">Exécuter</button>
-        </form>
-        <h3>Historique</h3>
-        <div id="wallet-history"></div>
-      </section>
-    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js" crossorigin="anonymous"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
+
+<!-- Blocking modal used to show critical connection/auth errors -->
+<div id="blocking-modal" class="modal hidden" aria-hidden="true">
+  <div class="modal-content">
+    <button id="blocking-close" class="modal-close btn">Fermer</button>
+    <h3 id="blocking-title">Erreur</h3>
+    <div id="blocking-message" style="margin-top:12px;color:var(--muted)"></div>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button id="blocking-retry" class="btn primary">Réessayer</button>
+      <button id="blocking-reload" class="btn">Recharger la page</button>
+    </div>
+  </div>
+</div>

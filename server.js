@@ -7,6 +7,8 @@ import fs from 'fs/promises';
 import fetch from "node-fetch";
 import expressPkg from 'express';
 const { json } = expressPkg;
+import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
 import { createUser as authCreateUser, authenticateUser } from './backend/auth.js';
 import * as Wallet from './backend/wallet.js';
 import logger from './backend/logger.js';
@@ -49,22 +51,28 @@ async function resolveSupabaseUrl() {
   for (const c of candidates) {
     try {
       const url = c.replace(/\/$/, '');
+      // Visible probe log to help debugging when logger.debug is filtered
+      console.info('[SUPABASE] probing candidate', url);
       logger.debug('[SUPABASE] probing', { url });
       // ping root to see if the gateway responds
       const r = await fetch(url + '/', { method: 'GET', redirect: 'manual' });
       logger.debug('[SUPABASE] probe', { url, status: r && r.status });
+      console.info('[SUPABASE] probe result', { url, status: r && r.status });
       // consider any response as available (200/302/404 are ok proxy responses)
       if (r && (r.status < 500)) {
         _cachedSupabaseUrl = url;
+        console.info('[SUPABASE] auto-detected SUPABASE_URL = ' + url);
         logger.info('[SUPABASE] auto-detected SUPABASE_URL = ' + url);
         return url;
       }
     } catch (e) {
+      console.debug('[SUPABASE] probe failed candidate', c, e && (e.message || String(e)));
       logger.debug('[SUPABASE] probe failed', { candidate: c, err: e && (e.message || String(e)) });
       // continue to next candidate
     }
   }
   // fallback default
+  console.warn('[SUPABASE] Could not auto-detect SUPABASE_URL; using http://localhost:55321');
   logger.warn('[SUPABASE] Could not auto-detect SUPABASE_URL; using http://localhost:55321');
   _cachedSupabaseUrl = 'http://localhost:55321';
   return _cachedSupabaseUrl;
@@ -210,11 +218,23 @@ app.get("/api/assets", async (req, res) => {
 
   // Alerts endpoints (protected)
   app.post('/api/alerts', verifyAuth, async (req, res) => {
-    const { symbol, threshold, direction } = req.body || {};
-    if (!symbol || !threshold || !direction) return res.status(400).json({ error: 'missing fields' });
-    try {
-      console.log('[API] /api/alerts request user:', JSON.stringify(req.user));
-    } catch (e) { console.log('[API] /api/alerts request user: <unserializable>'); }
+    const { symbol, threshold, direction, delivery_method } = req.body || {};
+    console.info('[API] /api/alerts received', { body: req.body, user: (req.user && (req.user.email || req.user.id)) });
+    if (!symbol || (threshold === undefined) || !direction) {
+      console.warn('[API] /api/alerts missing fields', { symbol, threshold, direction });
+      return res.status(400).json({ error: 'missing fields' });
+    }
+    // basic validation to avoid DB errors
+    const thr = Number(threshold);
+    if (!isFinite(thr) || thr <= 0 || thr > 1e12) {
+      console.warn('[API] /api/alerts invalid threshold', { threshold });
+      return res.status(400).json({ error: 'invalid threshold' });
+    }
+    if (!['above','below'].includes(direction)) {
+      console.warn('[API] /api/alerts invalid direction', { direction });
+      return res.status(400).json({ error: 'invalid direction' });
+    }
+    const delivery = (delivery_method === 'discord') ? 'discord' : 'email';
     const userId = req.user?.id || 'unknown';
     if (DEV_AUTH) {
       const arr = DEV_ALERTS.get(userId) || [];
@@ -227,15 +247,84 @@ app.get("/api/assets", async (req, res) => {
     const client = getPgClient();
     try {
       await client.connect();
-      const ins = await client.query('INSERT INTO public.alerts (user_id, symbol, threshold, direction) VALUES ($1,$2,$3,$4) RETURNING *', [userId, symbol, threshold, direction]);
+      // ensure confirmed column exists (safe to run)
+      try { console.debug('[API] ensuring confirmed column exists'); await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS confirmed boolean DEFAULT false"); } catch(e){ console.warn('[API] alter confirmed failed', e && (e.message || e)); }
+      // ensure delivery_method column exists (added later) to avoid insert errors
+      try { console.debug('[API] ensuring delivery_method column exists'); await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS delivery_method text DEFAULT 'email'"); } catch(e){ console.warn('[API] alter delivery_method failed', e && (e.message || e)); }
+      console.debug('[API] inserting alert', { userId, symbol, threshold: thr, direction, delivery });
+      const ins = await client.query('INSERT INTO public.alerts (user_id, symbol, threshold, direction, delivery_method) VALUES ($1,$2,$3,$4,$5) RETURNING *', [userId, symbol, thr, direction, delivery]);
+      const alertRow = ins && ins.rows && ins.rows[0];
+      console.info('[API] alert inserted', { id: alertRow && alertRow.id });
+      // send confirmation email (if email method)
+      try {
+        // prepare token
+        const secret = process.env.JWT_SECRET || 'devsecret';
+        const token = jwt.sign({ alertId: alertRow.id, userId }, secret, { expiresIn: '7d' });
+        const origin = req.headers.origin || (`http://localhost:${PORT}`);
+        const confirmUrl = origin + '/api/alerts/confirm?token=' + encodeURIComponent(token);
+        // send email if SMTP configured and user email present
+        const userEmail = req.user && req.user.email;
+        console.debug('[MAIL] confirmation', { delivery, userEmail, smtp: !!process.env.SMTP_HOST });
+        if (delivery === 'email' && userEmail && process.env.SMTP_HOST && process.env.SMTP_PORT) {
+          const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: (process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true'), auth: (process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined) });
+          await transporter.sendMail({ from: process.env.EMAIL_FROM || 'no-reply@example.com', to: userEmail, subject: 'Confirmation d\'alerte AMS', text: `Bonjour,\n\nMerci de confirmer votre alerte pour ${symbol} (${direction} ${thr}). Cliquez sur le lien suivant pour confirmer : ${confirmUrl}\n\nSi vous n'avez pas demandé cette alerte, ignorez cet email.`, html: `<p>Bonjour,</p><p>Merci de confirmer votre alerte pour <strong>${symbol}</strong> (${direction} ${thr}).</p><p><a href="${confirmUrl}">Confirmer l\'alerte</a></p><p>Si vous n\'avez pas demandé cette alerte, ignorez cet email.</p>` });
+          console.info('[MAIL] sent confirmation to', userEmail);
+        } else {
+          console.info('[MAIL] skipped sending confirmation (no smtp or email)', { delivery, userEmail });
+        }
+      } catch(e) { logger.warn('[MAIL] send failed', { err: e && (e.message || String(e)) }); }
+
       await client.end();
-      return res.status(201).json(ins.rows[0]);
+      return res.status(201).json(alertRow);
     } catch (e) {
       try { await client.end(); } catch (e) {}
       console.error('[API] alerts insert error', e.message);
       return res.status(500).json({ error: 'db error' });
     }
   });
+
+// Confirmation endpoint: validates token and marks alert as confirmed
+app.get('/api/alerts/confirm', async (req, res) => {
+  const token = req.query.token;
+  if (!token) return res.status(400).send('missing token');
+  try {
+    const secret = process.env.JWT_SECRET || 'devsecret';
+    const payload = jwt.verify(String(token), secret);
+    const alertId = payload && payload.alertId;
+    console.info('[API] /api/alerts/confirm token payload', { alertId });
+    if (!alertId) return res.status(400).send('invalid token');
+    const client = getPgClient();
+    try {
+      await client.connect();
+      console.debug('[API] /api/alerts/confirm ensuring confirmed column');
+      await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS confirmed boolean DEFAULT false");
+      const r = await client.query('UPDATE public.alerts SET confirmed = true WHERE id = $1 RETURNING *', [alertId]);
+      await client.end();
+      console.info('[API] /api/alerts/confirm updated rows', { rowCount: r && r.rowCount });
+      if (r.rowCount === 0) return res.status(404).send('alert not found');
+      return res.send('Alerte confirmée.');
+    } catch (e) { try{await client.end();}catch(e){} console.error('[API] alerts confirm error', e && (e.message || String(e))); return res.status(500).send('error'); }
+  } catch (e) {
+    console.error('[API] confirm token error', e && (e.message || String(e)));
+    return res.status(400).send('invalid or expired token');
+  }
+});
+
+// Diagnostic: return table columns for alerts (temporary)
+app.get('/api/diag/alerts-schema', async (req, res) => {
+  const client = getPgClient();
+  try {
+    await client.connect();
+    const cols = await client.query(`SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='alerts' ORDER BY ordinal_position`);
+    const cnt = await client.query('SELECT count(*)::int as cnt FROM public.alerts');
+    await client.end();
+    return res.json({ columns: cols.rows || [], count: cnt && cnt.rows && cnt.rows[0] ? cnt.rows[0].cnt : null });
+  } catch (e) {
+    try { await client.end(); } catch (e) {}
+    console.error('[DIAG] alerts-schema error', e && (e.message || String(e)));
+    return res.status(500).json({ error: 'diag-failed', details: e && (e.message || String(e)) });
+  }
+});
 
   app.get('/api/alerts', verifyAuth, async (req, res) => {
     const userId = req.user?.id || 'unknown';
@@ -290,10 +379,9 @@ if (_isMain) {
     console.log(`Serveur web démarré sur http://localhost:${PORT}/webui/index.html`);
     if (DEV_AUTH) {
       console.log('[DEV] DEV_AUTH enabled — DB calls are skipped or emulated in dev mode');
-    } else {
-      // run startup checks (extracted for testability)
-      runStartupChecks().catch(() => {});
     }
+    // run startup checks (extracted for testability) in all modes to ensure probes run
+    runStartupChecks().catch(() => {});
   });
 }
 
@@ -301,15 +389,24 @@ export default app;
 
 // Extracted startup checks to allow tests to exercise startup branches
 export async function runStartupChecks() {
-  if (DEV_AUTH) {
-    console.log('[DEV] DEV_AUTH enabled — DB calls are skipped or emulated in dev mode');
-    return;
-  }
   try {
+    // Always attempt to discover Supabase URL for diagnostics (visible to console)
+    try {
+      const supa = await resolveSupabaseUrl();
+      console.info('[STARTUP] resolveSupabaseUrl returned', supa);
+    } catch (e) { console.debug('[STARTUP] resolveSupabaseUrl failed', e && (e.message || String(e))); }
+
+    if (DEV_AUTH) {
+      console.log('[DEV] DEV_AUTH enabled — DB calls are skipped or emulated in dev mode');
+      return;
+    }
+
     const client = getPgClient();
+    console.info('[PG] attempting connection test to', { host: process.env.PGHOST || 'localhost', port: process.env.PGPORT || process.env.PG_PORT || 5433 });
     await client.connect();
     await client.end();
     logger.info('[PG] Postgres reachable');
+    console.info('[PG] Postgres reachable');
   } catch (e) {
     // Detailed diagnostics: log full error and any AggregateError causes
     try {
@@ -334,7 +431,12 @@ export async function runStartupChecks() {
 // Auth proxy endpoints for frontend (signup / login)
 app.post('/auth/signup', async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'missing email or password' });
+  const hasEmail = !!(req.body && typeof req.body.email === 'string' && req.body.email.length > 0);
+  const hasPassword = !!(req.body && typeof req.body.password === 'string' && req.body.password.length > 0);
+  if (!hasEmail || !hasPassword) {
+    logger.warn('[AUTH] signup missing fields', { hasEmail, hasPassword, contentType: req.headers['content-type'] });
+    return res.status(400).json({ error: 'missing email or password', details: { hasEmail, hasPassword, contentType: req.headers['content-type'] } });
+  }
   if (DEV_AUTH) {
     // permissive dev signup: reuse existing dev token if present, otherwise create one
     if (DEV_USER_BY_EMAIL.has(email)) {
@@ -385,9 +487,36 @@ app.post('/auth/signup', async (req, res) => {
   }
 });
 
+// Logout proxy: clear Supabase cookies set by the proxy/gateway so client can fully logout
+app.post('/auth/logout', (req, res) => {
+  try {
+    const cookieHeader = req.headers.cookie || '';
+    const cookies = cookieHeader.split(';').map(s => s.trim()).filter(Boolean);
+    const toClear = cookies.map(c => c.split('=')[0]).filter(n => n && n.startsWith('sb-'));
+    toClear.forEach(name => {
+      // set expired cookie to clear it in browser
+      res.cookie(name, '', { expires: new Date(0), path: '/' });
+      console.info('[AUTH] cleared cookie', name);
+    });
+    // also attempt to clear common auth cookie names
+    ['sb-access-token','sb-refresh-token','supabase-auth-token'].forEach(name => {
+      res.cookie(name, '', { expires: new Date(0), path: '/' });
+    });
+    return res.json({ ok: true, cleared: toClear });
+  } catch (e) {
+    console.error('[AUTH] logout error', e && (e.message || String(e)));
+    return res.status(500).json({ error: 'logout-failed' });
+  }
+});
+
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
-  if (!email || !password) return res.status(400).json({ error: 'missing email or password' });
+  const hasEmail = !!(req.body && typeof req.body.email === 'string' && req.body.email.length > 0);
+  const hasPassword = !!(req.body && typeof req.body.password === 'string' && req.body.password.length > 0);
+  if (!hasEmail || !hasPassword) {
+    logger.warn('[AUTH] login missing fields', { hasEmail, hasPassword, contentType: req.headers['content-type'] });
+    return res.status(400).json({ error: 'missing email or password', details: { hasEmail, hasPassword, contentType: req.headers['content-type'] } });
+  }
   if (DEV_AUTH) {
     // permissive dev login: reuse existing token for email or create one
     if (DEV_USER_BY_EMAIL.has(email)) {
@@ -418,9 +547,28 @@ app.post('/auth/login', async (req, res) => {
     let json;
     try { json = txt ? JSON.parse(txt) : {}; } catch(e) { json = { raw: txt }; }
     if (!r.ok) {
-      console.error('[AUTH] login proxied response error', r.status, txt);
+      console.error('[AUTH] login proxied response error', r.status, json || txt);
+      // Do NOT attempt an automatic DB fallback on invalid credentials.
+      // Falling back to local DB auth here is unsafe because the RPC
+      // helpers do not verify password hashes. If an operator explicitly
+      // enables a DB fallback in a controlled environment, they can set
+      // `ALLOW_DB_AUTH_FALLBACK=1` in the environment to opt into that
+      // behavior (not recommended for production).
+      const allowFallback = process.env.ALLOW_DB_AUTH_FALLBACK === '1';
+      if (allowFallback) {
+        try {
+          logger.info('[AUTH] proxied login failed — ALLOW_DB_AUTH_FALLBACK enabled, trying DB fallback');
+          const auth = await authenticateUser(email, password || null);
+          if (auth) {
+            logger.info('[AUTH] login fallback succeeded for', { email });
+            return res.json({ access_token: auth.token, token_type: 'bearer', expires_in: 28800, user: auth.user });
+          }
+        } catch (fbErr) {
+          console.error('[AUTH] login fallback error', fbErr && (fbErr.message || fbErr));
+        }
+      }
     } else {
-      console.log('[AUTH] login proxied response', r.status, txt);
+      console.log('[AUTH] login proxied response', r.status, json || txt);
     }
     return res.status(r.status).json(json);
   } catch (e) {
@@ -631,6 +779,11 @@ app.post('/api/wallet/trade', verifyAuth, async (req, res) => {
 
     console.error('[WALLET] trade error', e.message || e);
 
+    const msg = e && (e.message || String(e)) || 'trade failed';
+    // Known validation errors from backend/wallet.js -> surface as 400
+    if (msg.includes('insufficient') || msg.includes('invalid trade') || msg.includes('invalid amount')) {
+      return res.status(400).json({ error: msg });
+    }
     return res.status(500).json({ error: 'trade failed' });
 
   }

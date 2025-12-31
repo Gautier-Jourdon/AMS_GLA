@@ -8,6 +8,15 @@ export function getLoginPanel() {
       : (typeof document !== 'undefined' ? document.getElementById('login-panel') : null);
 }
 
+// Auto-initialize UI when the DOM is ready so auth wiring runs in the browser
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    try { initApp(); } catch (e) { console.error('initApp auto-call failed', e); }
+  } else {
+    window.addEventListener('DOMContentLoaded', () => { try { initApp(); } catch (e) { console.error('initApp auto-call failed', e); } });
+  }
+}
+
 export function getMainPanel() {
   return typeof global !== 'undefined' && global.mainPanel
     ? global.mainPanel
@@ -135,6 +144,20 @@ export function formatPercent(num) {
   return `<span class="${cls}">${formatted}</span>`;
 }
 
+// small debounce helper for input events (UI only)
+export function debounce(fn, wait = 180){ let t = null; return function(...args){ clearTimeout(t); t = setTimeout(()=> fn.apply(this,args), wait); }; }
+
+// modal helpers for asset details
+export function openAssetModal(html){
+  if (typeof document === 'undefined') return;
+  const m = document.getElementById('asset-modal');
+  const body = document.getElementById('modal-body');
+  if (!m || !body) return;
+  body.innerHTML = html;
+  m.classList.remove('hidden');
+}
+export function closeAssetModal(){ if (typeof document === 'undefined') return; const m = document.getElementById('asset-modal'); if (!m) return; m.classList.add('hidden'); }
+
 // Affiche le tableau des assets
 export function renderTable(assets, targetTableBody) {
 
@@ -185,12 +208,10 @@ export async function loadAssets() {
 
     // On passe par l'API servie par server.js pour éviter les soucis de CORS
 
-    const response = await fetch("/api/assets");
+    const response = await fetchWithBlocking('/api/assets', {}, { onRetry: () => loadAssets() });
 
     if (!response.ok) {
-
-      throw new Error("HTTP " + response.status);
-
+      throw new Error('HTTP ' + response.status);
     }
 
     const data = await response.json();
@@ -200,6 +221,7 @@ export async function loadAssets() {
     renderTable(allAssets);
 
     populateChartSelect(allAssets);
+    try { populateWalletSymbolSelect(allAssets); } catch(e) { /* non-fatal */ }
 
   } catch (err) {
 
@@ -244,6 +266,22 @@ export function populateChartSelect(assets) {
 
 }
 
+// populate wallet trade symbol select
+export function populateWalletSymbolSelect(assets) {
+  if (typeof document === 'undefined') return;
+  const sel = document.getElementById('w-symbol');
+  if (!sel) return;
+  // preserve existing first option
+  const empty = sel.querySelector('option[value=""]') ? '' : '<option value="">-- choisir --</option>';
+  sel.innerHTML = empty;
+  (assets || []).slice(0, 500).forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.symbol || a.id;
+    opt.textContent = `${a.symbol} — ${a.name}`;
+    sel.appendChild(opt);
+  });
+}
+
 
 // Affiche l'onglet sélectionné
 // get tab buttons from globals or document
@@ -280,11 +318,118 @@ export function switchToTab(name) {
 
   getTabSections().forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + name));
 
-  try { if (name === 'wallet' && typeof loadWallet === 'function') loadWallet(); } catch (e) {}
+  try {
+    if (name === 'wallet') {
+      try { populateWalletSymbolSelect(allAssets); } catch(e) {}
+      if (typeof loadWallet === 'function') loadWallet();
+    }
+  } catch (e) {}
 
 }
 
-if (typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
+if (typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', (e) => { if (b.hasAttribute && b.hasAttribute('disabled')) { e.preventDefault(); return; } switchToTab(b.dataset.tab); }));
+
+// Login / Signup toggle (show one form, hide the other)
+function showLoginForm() {
+  if (typeof document === 'undefined') return;
+  const loginPanel = document.getElementById('login-panel');
+  const signupPanel = document.getElementById('signup-panel');
+  const tabL = document.getElementById('tab-login');
+  const tabS = document.getElementById('tab-signup');
+  if (loginPanel) loginPanel.classList.remove('hidden');
+  if (signupPanel) signupPanel.classList.add('hidden');
+  if (tabL) tabL.classList.add('active');
+  if (tabS) tabS.classList.remove('active');
+  const email = document.getElementById('email'); if (email) email.focus();
+}
+
+function showSignupForm() {
+  if (typeof document === 'undefined') return;
+  const loginPanel = document.getElementById('login-panel');
+  const signupPanel = document.getElementById('signup-panel');
+  const tabL = document.getElementById('tab-login');
+  const tabS = document.getElementById('tab-signup');
+  if (signupPanel) signupPanel.classList.remove('hidden');
+  if (loginPanel) loginPanel.classList.add('hidden');
+  if (tabS) tabS.classList.add('active');
+  if (tabL) tabL.classList.remove('active');
+  const email = document.getElementById('su_email'); if (email) email.focus();
+}
+
+if (typeof document !== 'undefined') {
+  const tLogin = document.getElementById('tab-login');
+  const tSignup = document.getElementById('tab-signup');
+  if (tLogin) tLogin.addEventListener('click', (e) => { e.preventDefault(); showLoginForm(); });
+  if (tSignup) tSignup.addEventListener('click', (e) => { e.preventDefault(); showSignupForm(); });
+  // ensure initial state: login panel visible, signup hidden
+  try { const sp = document.getElementById('signup-panel'); if (sp && !sp.classList.contains('hidden')) showLoginForm(); } catch(e) { /* ignore */ }
+}
+
+// Prevent alerts creation when not authenticated and handle form submit
+if (typeof document !== 'undefined') {
+  const alertForm = document.getElementById('alert-form');
+  const alertsTabButton = document.querySelector('.tab-btn[data-tab="alerts"]');
+  if (alertsTabButton) alertsTabButton.addEventListener('click', (e) => {
+    const user = getAuthUser();
+    if (!user) {
+      e.preventDefault();
+      // show blocking modal prompting login
+      const bm = document.getElementById('blocking-modal');
+      const msg = document.getElementById('blocking-message');
+      const title = document.getElementById('blocking-title');
+      if (title) title.textContent = 'Connexion requise';
+      if (msg) msg.textContent = 'Vous devez être connecté pour gérer vos alertes. Connectez-vous ou créez un compte.';
+      if (bm) bm.classList.remove('hidden');
+      // switch to auth area
+      try { showLoginForm(); } catch(e){}
+    }
+  });
+  if (alertForm) {
+    alertForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const user = getAuthUser();
+      if (!user) {
+        alert('Vous devez être connecté pour créer une alerte.');
+        return;
+      }
+      const symbol = (document.getElementById('alert-symbol') || {}).value || '';
+      const threshold = (document.getElementById('alert-threshold') || {}).value || '';
+      const direction = (document.getElementById('alert-direction') || {}).value || '';
+      const delivery = (document.getElementById('alert-delivery') || {}).value || 'email';
+      console.debug('[UI] alert-form submit values', { symbol, threshold, direction, delivery, user: (user && (user.email || user.id)) });
+      // client-side validation
+      if (!symbol || symbol.length < 1) { alert('Symbole requis'); return; }
+      const thr = Number(threshold);
+      if (!isFinite(thr) || thr <= 0 || thr > 1e12) { alert('Seuil invalide'); return; }
+      if (!['above','below'].includes(direction)) { alert('Direction invalide'); return; }
+      // disable submit to avoid duplicate submissions
+      const submitBtn = alertForm.querySelector('button[type=submit]');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': getAuthToken() ? ('Bearer ' + getAuthToken()) : '' }, body: JSON.stringify({ symbol: symbol.trim().toUpperCase(), threshold: thr, direction, delivery_method: delivery }) };
+        console.debug('[UI] posting alert to /api/alerts', { opts: { method: opts.method, headers: Object.keys(opts.headers), bodyPreview: (opts.body || '').slice(0,200) } });
+        const resp = await fetchWithBlocking('/api/alerts', opts, { onRetry: null });
+        console.debug('[UI] /api/alerts response', { status: resp && resp.status });
+        if (!resp.ok) {
+          const j = await resp.json().catch(()=>({ error: 'unknown' }));
+          console.warn('[UI] alert create failed', { status: resp.status, body: j });
+          alert('Erreur création alerte: ' + (j && j.error ? j.error : resp.status));
+        } else {
+          const j = await resp.json().catch(()=>null);
+          console.info('[UI] alert created', { row: j });
+          alert('Alerte créée. Un email de confirmation a été envoyé si applicable.');
+          // refresh alerts list if any
+          try { loadAlerts && loadAlerts(); } catch(e){ console.warn('loadAlerts failed', e); }
+        }
+      } catch (e) {
+        console.error('alert submit failed', e);
+        alert('Erreur réseau lors de la création de l\'alerte: ' + (e && e.message));
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+  }
+}
 
 
 // Génère un historique de prix fictif pour les graphiques
@@ -323,25 +468,24 @@ export function renderChartFor(symbol, period) {
   if (window.cryptoChart && typeof window.cryptoChart.destroy === 'function') window.cryptoChart.destroy();
 
   window.cryptoChart = new Chart(ctx, {
-
     type: 'line',
-
     data: {
-
       labels,
-
       datasets: [{ label: `${asset.symbol} price (USD)`, data: history, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.12)', tension: 0.15 }]
-
     },
-
     options: {
-
       plugins: { legend: { display: true } },
-
-      scales: { x: { display: true }, y: { display: true } }
-
+      scales: { x: { display: true }, y: { display: true } },
+      onClick: function(evt, elements){
+        try{
+          if (!elements || !elements.length) return;
+          const idx = elements[0].index;
+          const priceAt = history[idx];
+          const targetInput = document.getElementById('calc-target');
+          if (targetInput) { targetInput.value = priceAt; updateCalculatorForSymbol(asset.symbol); }
+        }catch(e){}
+      }
     }
-
   });
 
 }
@@ -354,6 +498,31 @@ if (getChartSelect()) {
 
 }
 
+// Calculator logic: compute qty/current value/target value/profit
+export function updateCalculatorForSymbol(symbol){
+  if (typeof document === 'undefined') return;
+  const amountEl = document.getElementById('calc-amount');
+  const qtyEl = document.getElementById('calc-qty');
+  const targetEl = document.getElementById('calc-target');
+  const resEl = document.getElementById('calc-results');
+  if (!resEl) return;
+  const asset = allAssets.find(a => a.symbol === symbol) || allAssets[0];
+  const price = Number(asset?.priceUsd) || 0;
+  let amount = Number(amountEl?.value) || 0;
+  let qty = Number(qtyEl?.value) || 0;
+  const target = Number(targetEl?.value) || price;
+  if (!qty && amount) qty = amount / (price || 1);
+  if (!amount && qty) amount = qty * price;
+  // ensure numbers
+  qty = Number(qty || 0);
+  amount = Number(amount || 0);
+  const currentValue = qty * price;
+  const targetValue = qty * target;
+  const profit = targetValue - amount;
+  const roi = amount ? (profit / amount) * 100 : 0;
+  resEl.innerHTML = `Prix courant: ${formatNumber(price)} USD · Quantité: ${qty ? qty.toFixed(8) : '-'} · Valeur actuelle: ${formatNumber(currentValue)} USD · Valeur cible: ${formatNumber(targetValue)} USD · Profit: ${formatNumber(profit)} USD · ROI: ${roi ? roi.toFixed(2) + '%' : '-'}`;
+}
+
 
 
 // Crée une alerte via l'API (exportée pour tests et usage UI)
@@ -362,7 +531,10 @@ export async function createAlert(symbol, threshold, direction) {
 
   const token = getAuthToken();
 
+
   if (!token) throw new Error('Non authentifié');
+
+  console.debug('[UI] createAlert called', { symbol, threshold, direction, tokenPresent: !!token });
 
   const r = await fetch('/api/alerts', {
 
@@ -374,9 +546,13 @@ export async function createAlert(symbol, threshold, direction) {
 
   });
 
+  console.debug('[UI] createAlert response status', { status: r.status });
+
   if (!r.ok) {
 
     const j = await r.json().catch(() => ({}));
+
+    console.warn('[UI] createAlert error body', j);
 
     throw new Error('Erreur: ' + (j.error || r.status));
 
@@ -399,15 +575,22 @@ export function showLoggedIn() {
 
   if (!loginPanel_ || !mainPanel_) return;
 
-  loginPanel_.classList.add('hidden');
+  // hide login panel and ensure main UI is visible
+  try { loginPanel_.classList.add('hidden'); } catch (e) {}
+  try { mainPanel_.classList.remove('hidden'); } catch (e) {}
 
-  mainPanel_.classList.remove('hidden');
+  // hide the entire auth area (title + tabs) when logged in
+  try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.add('hidden'); } catch(e){}
+  // also hide the containing #login-signin-panel if present
+  try { const loginPanelWrap = document.getElementById('login-signin-panel'); if (loginPanelWrap) loginPanelWrap.classList.add('hidden'); } catch(e){}
 
   if (currentUserSpan_) currentUserSpan_.textContent = getAuthUser() ? (getAuthUser().email || getAuthUser().id) : 'connecté';
 
   switchToTab('table');
 
   if (typeof startSessionTimer === 'function') startSessionTimer();
+
+  try { updateAuthControls(); } catch(e){}
 
 }
 
@@ -423,13 +606,16 @@ export function showLoggedOut() {
 
   if (!loginPanel_ || !mainPanel_) return;
 
-  loginPanel_.classList.remove('hidden');
-
-  mainPanel_.classList.add('hidden');
-
-  if (currentUserSpan_) currentUserSpan_.textContent = '';
+  // when logged out, show auth area and login panel, hide main interface
+  try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); } catch(e){}
+  try { loginPanel_.classList.remove('hidden'); } catch(e){}
+  try { mainPanel_.classList.add('hidden'); } catch(e){}
+  if (currentUserSpan_) currentUserSpan_.textContent = 'Visiteur';
+  // ensure #login-signin-panel visible when logged out
+  try { const loginPanelWrap = document.getElementById('login-signin-panel'); if (loginPanelWrap) loginPanelWrap.classList.remove('hidden'); } catch(e){}
 
   if (typeof stopSessionTimer === 'function') stopSessionTimer();
+  try { updateAuthControls(); } catch(e){}
 
 }
 
@@ -437,14 +623,18 @@ export function showLoggedOut() {
 // perform login and store token/user
 export async function doLogin(email, password) {
 
+  console.debug('[UI] doLogin attempt', { email });
   const r = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
 
   const json = await r.json();
 
-  if (!r.ok) throw new Error(json?.error || JSON.stringify(json));
+  if (!r.ok) {
+    console.warn('[UI] doLogin failed', { status: r.status, body: json });
+    throw new Error(json?.error || JSON.stringify(json));
+  }
 
   const token = json?.access_token || json?.token || null;
-
+  console.info('[UI] doLogin success', { email, tokenPresent: !!token });
   setAuthToken(token);
 
   const user = json?.user || { email };
@@ -505,19 +695,26 @@ export function stopSessionTimer() {
 
 export function doLogout(auto = false) {
 
-  setAuthToken(null);
+  console.debug('[UI] doLogout start', { auto });
+  try {
+    // ask server to clear any Supabase cookies
+    try { fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(()=>{}); } catch(e) {}
+  } catch (e) { console.debug('[UI] logout proxy call failed', e); }
 
+  setAuthToken(null);
   setAuthUser(null);
 
   if (typeof localStorage !== 'undefined') {
-
     localStorage.removeItem('supabase_token');
-
     localStorage.removeItem('supabase_user');
-
   }
 
-  showLoggedOut();
+  try { showLoggedOut(); } catch (e) { console.debug('showLoggedOut failed', e); }
+
+  try { updateAuthControls(); } catch (e) { console.debug('updateAuthControls failed', e); }
+
+  // force reload to ensure any cookie-based session is cleared in the browser
+  try { console.info('[UI] forcing reload to ensure logout'); window.location.reload(); } catch(e) { console.debug('reload failed', e); }
 
   if (auto && typeof alert !== 'undefined') alert('Vous avez été déconnecté pour cause d\'inactivité (30s)');
 
@@ -530,6 +727,8 @@ export function doLogout(auto = false) {
 export function initApp() {
 
   if (typeof window === 'undefined') return;
+
+  console.debug('[UI] initApp starting', { tokenPresent: !!getAuthToken(), user: getAuthUser() ? (getAuthUser().email || getAuthUser().id) : null });
 
   if (getAuthToken()) {
 
@@ -548,15 +747,11 @@ export function initApp() {
   const search = getSearchInput();
 
   if (search) {
-
-    search.addEventListener('input', (e) => {
-
-      const q = e.target.value.trim().toLowerCase();
-
+    const doSearch = debounce((e) => {
+      const q = (e.target?.value || '').trim().toLowerCase();
       renderTable(allAssets.filter(a => a.name?.toLowerCase().includes(q) || a.symbol?.toLowerCase().includes(q)));
-
-    });
-
+    }, 180);
+    search.addEventListener('input', doSearch);
   }
 
   // initialize UI enhancements (ticker, theme) in a test-safe way
@@ -643,6 +838,32 @@ export function wireAuthUI() {
   const hasSignupVisible = signupForm && !signupForm.classList.contains('hidden');
   if (hasSignupVisible) showSignupTab(); else showLoginTab();
 
+  // ensure logout/login button and restricted tabs are in correct state
+  try { updateAuthControls(); } catch (e) {}
+
+}
+
+// Update header auth button and restricted tabs based on login state
+export function updateAuthControls(){
+  if (typeof document === 'undefined') return;
+  const logoutBtn = document.getElementById('logout-btn');
+  const currentUserSpan_ = getCurrentUserSpan();
+  const isAuthed = Boolean(getAuthToken());
+  if (isAuthed){
+    if (logoutBtn){ logoutBtn.textContent = 'Déconnexion'; logoutBtn.classList.remove('ghost'); logoutBtn.onclick = (e)=>{ e.preventDefault(); doLogout(false); } }
+    if (currentUserSpan_) currentUserSpan_.textContent = getAuthUser() ? (getAuthUser().email || getAuthUser().id) : 'connecté';
+    // enable tabs
+    try{ getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.removeAttribute('disabled'); b.classList.remove('disabled'); } }); }catch(e){}
+    // hide auth area (title, tabs, login/signup panels)
+    try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.add('hidden'); } catch(e){}
+  } else {
+    if (logoutBtn){ logoutBtn.textContent = 'Se connecter'; logoutBtn.classList.add('ghost'); logoutBtn.onclick = (e)=>{ e.preventDefault(); const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); showLoginForm(); } }
+    if (currentUserSpan_) currentUserSpan_.textContent = 'Visiteur';
+    // disable restricted tabs
+    try{ getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.setAttribute('disabled','true'); b.classList.add('disabled'); } }); }catch(e){}
+    // ensure auth area visible when logged out
+    try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); } catch(e){}
+  }
 }
 
 // UI enhancements: theme toggle and small simulated market ticker
@@ -694,6 +915,108 @@ export function initUIEnhancements() {
 
   // start a soft market ticker
   startTicker();
+  
+  // modal close handler
+  const modal = document.getElementById('asset-modal');
+  if (modal) {
+    modal.querySelectorAll('.modal-close').forEach(b => b.addEventListener('click', (e)=>{ e.preventDefault(); closeAssetModal(); }));
+    modal.addEventListener('click', (e)=>{ if (e.target === modal) closeAssetModal(); });
+  }
+
+  // clickable table rows -> show quick details modal
+  const tbody = getTableBody();
+  if (tbody) tbody.addEventListener('click', (e) => {
+    let tr = e.target.closest && e.target.closest('tr');
+    if (!tr) return;
+    const sym = tr.children[1] ? tr.children[1].textContent.trim() : null;
+    if (!sym) return;
+    const asset = allAssets.find(a => a.symbol === sym) || allAssets[tr.rowIndex - 1];
+    const html = `<div style="display:flex;gap:12px;align-items:center"><div style="flex:1"><h3>${asset?.symbol} — ${asset?.name}</h3><div>Prix: ${formatNumber(asset?.priceUsd)} USD</div><div>Variation 24h: ${formatPercent(asset?.changePercent24Hr)}</div><div>Market Cap: ${formatNumber(asset?.marketCapUsd)}</div></div><div style="width:420px"><canvas id="modal-chart" width="420" height="180"></canvas></div></div>`;
+    openAssetModal(html);
+    // render mini chart
+    setTimeout(()=>{
+      try{
+        const canvas = document.getElementById('modal-chart');
+        if (canvas){
+          const ctx = canvas.getContext('2d');
+          const history = generateMockHistory(asset?.priceUsd || 1, 36);
+          if (window.modalChart && typeof window.modalChart.destroy === 'function') window.modalChart.destroy();
+          window.modalChart = new Chart(ctx, { type:'line', data:{ labels:history.map((_,i)=>i), datasets:[{ data:history, borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,0.08)', tension:0.25 }] }, options:{plugins:{legend:{display:false}},scales:{x:{display:false}} } });
+        }
+      }catch(_){/* ignore */}
+    }, 50);
+  });
+
+  // refresh button
+  const refresh = document.getElementById('refresh-assets');
+  if (refresh) refresh.addEventListener('click', (e)=>{ e.preventDefault(); loadAssets(); });
+
+  // calculator bindings
+  const amountEl = document.getElementById('calc-amount');
+  const qtyEl = document.getElementById('calc-qty');
+  const targetEl = document.getElementById('calc-target');
+  const swapBtn = document.getElementById('calc-swap');
+  const chartSel = getChartSelect();
+  const update = debounce(()=> { const sym = chartSel ? chartSel.value : (allAssets[0] && allAssets[0].symbol); updateCalculatorForSymbol(sym); }, 120);
+  if (amountEl) amountEl.addEventListener('input', update);
+  if (qtyEl) qtyEl.addEventListener('input', update);
+  if (targetEl) targetEl.addEventListener('input', update);
+  if (swapBtn) swapBtn.addEventListener('click', (e)=>{ e.preventDefault(); if (!amountEl || !qtyEl) return; const a = amountEl.value; amountEl.value = qtyEl.value; qtyEl.value = a; update(); });
+  if (chartSel) chartSel.addEventListener('change', ()=> update());
+}
+
+// Blocking modal helpers for critical errors
+export function showBlockingModal(title, message, onRetry) {
+  if (typeof document === 'undefined') return;
+  const modal = document.getElementById('blocking-modal');
+  const t = document.getElementById('blocking-title');
+  const m = document.getElementById('blocking-message');
+  const retry = document.getElementById('blocking-retry');
+  const reload = document.getElementById('blocking-reload');
+  const close = document.getElementById('blocking-close');
+  if (!modal || !t || !m) return;
+  t.textContent = title || 'Erreur';
+  m.textContent = message || '';
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  function cleanup() {
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    try { retry.removeEventListener('click', onRetryWrap); } catch(e){}
+    try { reload.removeEventListener('click', onReload); } catch(e){}
+    try { close.removeEventListener('click', onClose); } catch(e){}
+  }
+  function onRetryWrap(e) { e.preventDefault(); if (typeof onRetry === 'function') onRetry(); cleanup(); }
+  function onReload(e) { e.preventDefault(); cleanup(); window.location.reload(); }
+  function onClose(e) { e.preventDefault(); cleanup(); }
+  retry.addEventListener('click', onRetryWrap);
+  reload.addEventListener('click', onReload);
+  close.addEventListener('click', onClose);
+}
+
+export function hideBlockingModal() {
+  if (typeof document === 'undefined') return;
+  const modal = document.getElementById('blocking-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+// fetch wrapper that shows blocking modal on network/5xx errors
+export async function fetchWithBlocking(url, opts = {}, opts2 = {}) {
+  try {
+    const r = await fetch(url, opts);
+    if (r.status === 401) return r; // let caller handle 401
+    if (r.status >= 500) {
+      let txt = '';
+      try { txt = await r.text(); } catch (e) {}
+      showBlockingModal('Erreur serveur', `Le serveur a retourné ${r.status}. ${txt || ''}`, opts2.onRetry);
+    }
+    return r;
+  } catch (e) {
+    showBlockingModal('Erreur réseau', 'Impossible de contacter le serveur. Vérifie ta connexion et réessaie.', opts2.onRetry);
+    throw e;
+  }
 }
 
 // Wallet UI helpers
@@ -715,8 +1038,14 @@ export async function loadWallet() {
 
   try {
 
-    const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${getAuthToken()}` } });
-
+    const r = await fetchWithBlocking('/api/wallet', { headers: { Authorization: `Bearer ${getAuthToken()}` } }, { onRetry: () => loadWallet() });
+    if (r.status === 401) {
+      // token invalid -> clear and show login
+      setAuthToken(null);
+      setAuthUser(null);
+      showLoggedOut();
+      return;
+    }
     if (!r.ok) return;
 
     const w = await r.json();
@@ -747,23 +1076,64 @@ export function renderWallet(w) {
 
   if (!holdEl) return;
 
+  // build a nicer wallet card: holdings + quick actions + tips
   holdEl.innerHTML = '';
+  const container = document.createElement('div');
+  container.className = 'wallet-card';
 
+  const left = document.createElement('div'); left.className = 'left';
+  const right = document.createElement('div'); right.className = 'right';
+
+  // holdings list
   const h = w?.holdings || {};
-
   const keys = Object.keys(h);
+  if (!keys.length) {
+    left.innerHTML = '<div class="status">Aucune position</div>';
+  } else {
+    keys.forEach(sym => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.marginBottom = '8px';
+      card.innerHTML = `<strong>${sym}</strong><div>${Number(h[sym]).toFixed(8)} coins</div>`;
+      left.appendChild(card);
+    });
+  }
 
-  if (!keys.length) { holdEl.textContent = 'Aucune position'; return; }
+  // right: enhance existing trade form with quick buttons and tips
+  const tradeForm = document.getElementById('wallet-trade-form');
+  if (tradeForm) {
+    // ensure trade form has nice spacing
+    tradeForm.classList.add('trade-form');
+    // quick percent buttons (only add once)
+    if (!tradeForm.querySelector('.quick-pct')) {
+      const pctWrap = document.createElement('div'); pctWrap.className = 'trade-actions quick-pct';
+      ['25%','50%','75%','100%'].forEach(lbl => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost'; b.textContent = lbl;
+        b.addEventListener('click', (e)=>{
+          e.preventDefault();
+          const cash = Number(w?.cash) || 0;
+          const pct = Number(lbl.replace('%',''))/100;
+          const amountInput = document.getElementById('w-amount');
+          if (amountInput) amountInput.value = (cash * pct).toFixed(2);
+        });
+        pctWrap.appendChild(b);
+      });
+      tradeForm.insertBefore(pctWrap, tradeForm.firstChild);
+    }
+    // move form into right panel for card layout
+    right.appendChild(tradeForm);
+  } else {
+    right.innerHTML = '<div class="status">Formulaire de trading indisponible</div>';
+  }
 
-  keys.forEach(sym => {
+  // tips section
+  const tips = document.createElement('div'); tips.className = 'tips';
+  tips.textContent = 'Conseils: Diversifiez vos positions, utilisez des ordres limités, et ne tradez qu’avec des montants que vous pouvez vous permettre de perdre.';
+  right.appendChild(tips);
 
-    const div = document.createElement('div');
-
-    div.textContent = `${sym} : ${Number(h[sym]).toFixed(8)}`;
-
-    holdEl.appendChild(div);
-
-  });
+  container.appendChild(left);
+  container.appendChild(right);
+  holdEl.appendChild(container);
 
 }
 
@@ -783,7 +1153,8 @@ export function renderWalletHistory(h) {
 
     d.className = 'wallet-trade';
 
-    d.textContent = `${t.side.toUpperCase()} ${t.symbol} ${Number(t.qty).toFixed(8)} @ ${Number(t.priceUsd).toFixed(2)} USD`;
+    const ts = t.createdAt ? (new Date(t.createdAt)).toLocaleString() : (t.createdAtStr || '');
+    d.textContent = `${ts} — ${t.side.toUpperCase()} ${t.symbol} ${Number(t.qty).toFixed(8)} @ ${Number(t.priceUsd).toFixed(2)} USD (USD ${Number(t.amountUsd || (t.qty * t.priceUsd)).toFixed(2)})`;
 
     el.appendChild(d);
 
@@ -853,7 +1224,15 @@ export async function loadAlerts() {
 
   try {
 
-    const r = await fetch('/api/alerts', { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+    const r = await fetchWithBlocking('/api/alerts', { headers: { Authorization: `Bearer ${getAuthToken()}` } }, { onRetry: () => loadAlerts() });
+    if (r.status === 401) {
+      // token invalid or expired: clear and prompt login
+      setAuthToken(null);
+      setAuthUser(null);
+      alertsListEl.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>';
+      showLoggedOut();
+      return;
+    }
 
     if (!r.ok) { alertsListEl.innerHTML = `<div class="status error">Erreur: ${r.status}</div>`; return; }
 
@@ -869,7 +1248,7 @@ export async function loadAlerts() {
 
       div.className = 'alert-item';
 
-      div.innerHTML = `<strong>${a.symbol}</strong> ${a.direction} ${a.threshold} <button data-id="${a.id}" class="alert-delete">Supprimer</button>`;
+      div.innerHTML = `<strong>${a.symbol}</strong> ${a.direction} ${a.threshold} <button data-id="${a.id}" class="btn ghost alert-delete">Supprimer</button>`;
 
       alertsListEl.appendChild(div);
 
@@ -903,6 +1282,8 @@ export async function deleteAlert(id) {
   try {
 
     const r = await fetch(`/api/alerts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getAuthToken()}` } });
+
+    if (r.status === 401) { setAuthToken(null); setAuthUser(null); showLoggedOut(); return alert('Non authentifié'); }
 
     if (!r.ok) { return alert('Erreur suppression: ' + r.status); }
 

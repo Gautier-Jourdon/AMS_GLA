@@ -19,9 +19,9 @@ let inactivityTimeout = null;
 // Auto-initialize UI when the DOM is ready so auth wiring runs in the browser
 if (typeof window !== 'undefined') {
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    try { initApp(); } catch (e) { console.error('initApp auto-call failed', e); }
+    try { initializeApplication(); } catch (e) { console.error('initApp auto-call failed', e); }
   } else {
-    window.addEventListener('DOMContentLoaded', () => { try { initApp(); } catch (e) { console.error('initApp auto-call failed', e); } });
+    window.addEventListener('DOMContentLoaded', () => { try { initializeApplication(); } catch (e) { console.error('initApp auto-call failed', e); } });
   }
 }
 
@@ -283,6 +283,17 @@ export async function loadAssets() {
     populateChartSelect(allAssets);
     try { populateWalletSymbolSelect(allAssets); } catch (e) { /* non-fatal */ }
 
+    // Charge le graphique BTC par défaut si disponible
+    if (allAssets.length > 0) {
+      const defaultAsset = allAssets.find(a => a.symbol === 'BTC') || allAssets[0];
+      if (typeof renderChartFor === 'function') {
+        renderChartFor(defaultAsset.symbol, '24h');
+        // update select value to match
+        const sel = getChartSelect();
+        if (sel) sel.value = defaultAsset.symbol;
+      }
+    }
+
   } catch (err) {
 
     console.error("Erreur de chargement des assets", err);
@@ -450,7 +461,22 @@ export function switchToTab(name) {
 
   try {
     if (name === 'wallet') {
-      try { populateWalletSymbolSelect(allAssets); } catch (e) { }
+      try {
+        // Populate wallet select
+        const storedAssets = typeof allAssets !== 'undefined' ? allAssets : [];
+        const select = document.getElementById('w-symbol');
+        if (select && storedAssets.length > 0 && select.options.length <= 1) {
+          const sorted = [...storedAssets].sort((a, b) => (a.symbol || '').localeCompare(b.symbol || ''));
+          sorted.forEach(asset => {
+            const opt = document.createElement('option');
+            opt.value = asset.symbol;
+            opt.textContent = `${asset.symbol} - ${asset.name}`;
+            select.appendChild(opt);
+          });
+        }
+
+        populateWalletSymbolSelect(allAssets);
+      } catch (e) { }
       if (typeof loadWallet === 'function') loadWallet();
     }
   } catch (e) { }
@@ -500,7 +526,29 @@ if (typeof document !== 'undefined') {
   const alertForm = document.getElementById('alert-form');
   const alertsTabButton = document.querySelector('.tab-btn[data-tab="alerts"]');
   if (alertsTabButton) alertsTabButton.addEventListener('click', (e) => {
-    const user = getAuthUser();
+    // Populate symbol select
+    const storedAssets = typeof allAssets !== 'undefined' ? allAssets : [];
+    const select = document.getElementById('alert-symbol');
+    if (select && storedAssets.length > 0 && select.options.length <= 1) {
+      // Sort and populate
+      const sorted = [...storedAssets].sort((a, b) => (a.symbol || '').localeCompare(b.symbol || ''));
+      sorted.forEach(asset => {
+        const opt = document.createElement('option');
+        opt.value = asset.symbol;
+        opt.textContent = `${asset.symbol} - ${asset.name}`;
+        select.appendChild(opt);
+      });
+    }
+
+    // Check auth from memory or fallback to localStorage
+    let user = getAuthUser();
+    if (!user && typeof localStorage !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('authUser');
+        if (stored) user = JSON.parse(stored);
+      } catch (e) { }
+    }
+
     if (!user) {
       e.preventDefault();
       // show blocking modal prompting login
@@ -517,7 +565,15 @@ if (typeof document !== 'undefined') {
   if (alertForm) {
     alertForm.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const user = getAuthUser();
+      // Check auth from memory or fallback to localStorage
+      let user = getAuthUser();
+      if (!user && typeof localStorage !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('authUser');
+          if (stored) user = JSON.parse(stored);
+        } catch (e) { }
+      }
+
       if (!user) {
         alert('Vous devez être connecté pour créer une alerte.');
         return;
@@ -536,7 +592,10 @@ if (typeof document !== 'undefined') {
       const submitBtn = alertForm.querySelector('button[type=submit]');
       if (submitBtn) submitBtn.disabled = true;
       try {
-        const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': getAuthToken() ? ('Bearer ' + getAuthToken()) : '' }, body: JSON.stringify({ symbol: symbol.trim().toUpperCase(), threshold: thr, direction, delivery_method: delivery }) };
+        let token = getAuthToken();
+        if (!token && typeof localStorage !== 'undefined') token = localStorage.getItem('authToken');
+
+        const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token ? ('Bearer ' + token) : '' }, body: JSON.stringify({ symbol: symbol.trim().toUpperCase(), threshold: thr, direction, delivery_method: delivery }) };
         console.debug('[UI] posting alert to /api/alerts', { opts: { method: opts.method, headers: Object.keys(opts.headers), bodyPreview: (opts.body || '').slice(0, 200) } });
         const resp = await fetchWithBlocking('/api/alerts', opts, { onRetry: null });
         console.debug('[UI] /api/alerts response', { status: resp && resp.status });
@@ -624,7 +683,7 @@ export function renderChartFor(symbol, period) {
     },
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       interaction: {
         intersect: false,
         mode: 'index'
@@ -715,28 +774,43 @@ if (getChartSelect()) {
 }
 
 // Calculator logic: compute qty/current value/target value/profit
+// Calculator logic: compute qty/current value/target value/profit
 export function updateCalculatorForSymbol(symbol) {
   if (typeof document === 'undefined') return;
   const amountEl = document.getElementById('calc-amount');
-  const qtyEl = document.getElementById('calc-qty');
-  const targetEl = document.getElementById('calc-target');
+  const targetEl = document.getElementById('calc-target'); // Prix cible
   const resEl = document.getElementById('calc-results');
   if (!resEl) return;
+
   const asset = allAssets.find(a => a.symbol === symbol) || allAssets[0];
   const price = Number(asset?.priceUsd) || 0;
-  let amount = Number(amountEl?.value) || 0;
-  let qty = Number(qtyEl?.value) || 0;
-  const target = Number(targetEl?.value) || price;
-  if (!qty && amount) qty = amount / (price || 1);
-  if (!amount && qty) amount = qty * price;
-  // ensure numbers
-  qty = Number(qty || 0);
-  amount = Number(amount || 0);
-  const currentValue = qty * price;
-  const targetValue = qty * target;
-  const profit = targetValue - amount;
+
+  const amount = Number(amountEl?.value) || 0;
+  let target = Number(targetEl?.value) || 0;
+
+  if (amount <= 0) {
+    resEl.innerHTML = `Entrez un montant à investir (ex: 1000$). Prix actuel: ${formatNumber(price)} $`;
+    return;
+  }
+
+  // If no target set, default to price * 1.05 (5% profit) for demo
+  if (!target) target = price;
+
+  const qty = amount / (price || 1);
+  const futureValue = qty * target;
+  const profit = futureValue - amount;
   const roi = amount ? (profit / amount) * 100 : 0;
-  resEl.innerHTML = `Prix courant: ${formatNumber(price)} USD · Quantité: ${qty ? qty.toFixed(8) : '-'} · Valeur actuelle: ${formatNumber(currentValue)} USD · Valeur cible: ${formatNumber(targetValue)} USD · Profit: ${formatNumber(profit)} USD · ROI: ${roi ? roi.toFixed(2) + '%' : '-'}`;
+
+  const profitClass = profit >= 0 ? 'text-green' : 'text-red';
+  const sign = profit >= 0 ? '+' : '';
+
+  resEl.innerHTML = `
+    <div style="margin-bottom:4px;">Si le ${symbol} atteint <b>${formatNumber(target)} $</b> :</div>
+    <div>Portefeuille: <b>${formatNumber(futureValue)} $</b></div>
+    <div class="${profitClass}" style="font-weight:bold; margin-top:4px;">
+      Gains: ${sign}${formatNumber(profit)} $ (${sign}${roi.toFixed(2)}%)
+    </div>
+  `;
 }
 
 
@@ -982,45 +1056,24 @@ export function doLogout(auto = false) {
 
 // Initialise l'UI et la session (à appeler explicitement dans l'UI)
 // initialize UI and session
-export function initApp() {
+// Deprecated initApp function removed. The application now uses initializeApplication() which is exported as initApp.
 
-  if (typeof window === 'undefined') return;
-
-  console.debug('[UI] initApp starting', { tokenPresent: !!getAuthToken(), user: getAuthUser() ? (getAuthUser().email || getAuthUser().id) : null });
-
-  if (getAuthToken()) {
-
-    showLoggedIn();
-
-    loadAssets();
-
-    loadAlerts && loadAlerts();
-
-  } else {
-
-    showLoggedOut();
-
-  }
-
-  const search = getSearchInput();
-
-  if (search) {
-    const doSearch = debounce((e) => {
-      const q = (e.target?.value || '').trim().toLowerCase();
-      renderTable(allAssets.filter(a => a.name?.toLowerCase().includes(q) || a.symbol?.toLowerCase().includes(q)));
-    }, 180);
-    search.addEventListener('input', doSearch);
-  }
-
-  // initialize UI enhancements (ticker, theme) in a test-safe way
-  try {
-    initUIEnhancements();
-  } catch (e) { /* non-fatal */ }
-
-  // wire auth UI (tabs, forms, logout)
-  try { wireAuthUI(); } catch (e) { /* non-fatal */ }
-
+const search = getSearchInput();
+if (search) {
+  const doSearch = debounce((e) => {
+    const q = (e.target?.value || '').trim().toLowerCase();
+    renderTable(allAssets.filter(a => a.name?.toLowerCase().includes(q) || a.symbol?.toLowerCase().includes(q)));
+  }, 180);
+  search.addEventListener('input', doSearch);
 }
+
+// initialize UI enhancements (ticker, theme) in a test-safe way
+try {
+  initUIEnhancements();
+} catch (e) { /* non-fatal */ }
+
+// wire auth UI (tabs, forms, logout)
+try { wireAuthUI(); } catch (e) { /* non-fatal */ }
 
 // Wire login/signup tabs and form handlers
 export function wireAuthUI() {
@@ -1115,7 +1168,7 @@ export function updateAuthControls() {
     // hide auth area (title, tabs, login/signup panels)
     try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.add('hidden'); } catch (e) { }
   } else {
-    if (logoutBtn) { logoutBtn.textContent = 'Se connecter'; logoutBtn.classList.add('ghost'); logoutBtn.onclick = (e) => { e.preventDefault(); const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); showLoginForm(); } }
+    if (logoutBtn) { logoutBtn.textContent = 'Déconnexion'; logoutBtn.classList.add('ghost'); logoutBtn.onclick = (e) => { e.preventDefault(); const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); showLoginForm(); } }
     if (currentUserSpan_) currentUserSpan_.textContent = 'Visiteur';
     // disable restricted tabs
     try { getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.setAttribute('disabled', 'true'); b.classList.add('disabled'); } }); } catch (e) { }
@@ -1209,6 +1262,122 @@ export function initUIEnhancements() {
   const refresh = document.getElementById('refresh-assets');
   if (refresh) refresh.addEventListener('click', (e) => { e.preventDefault(); loadAssets(); });
 
+  // ------------------------------------------------------------------
+  // Projet AMS GLA - Interface Web Dynamique
+  // Gestion de l'authentification (JWT), des Websockets et de l'UI
+  // ------------------------------------------------------------------
+
+  // État global de l'application
+  let user = null;            // Utilisateur connecté
+  let authToken = null;       // Token JWT pour les requêtes API
+  let chartInstance = null;   // Instance du graphique Chart.js
+  let allAssets = [];         // Liste complète des cryptos disponibles
+
+  // Refs aux éléments DOM pour éviter de les re-chercher tout le temps
+  const sections = document.querySelectorAll('.tab-section');
+  const mainHeader = document.querySelector('header');
+  const authSection = document.getElementById('auth-section');
+
+  // Initialisation au chargement de la page
+  document.addEventListener('DOMContentLoaded', () => {
+
+    // Récupère les préférences de l'utilisateur (thème, token stocké)
+    loadSettings();
+
+    // Prépare les écouteurs d'événements (boutons, formulaires...)
+    initializeApplication();
+
+    // Lance l'animation de fond (particules)
+    initParticles();
+
+    // Tente de récupérer les données initiales
+    fetchAssets();
+  });
+
+  // ---------------------------------------------------
+  // Gestion de l'Authentification (Login / Inscription)
+  // ---------------------------------------------------
+
+  /**
+   * Configure les boutons et formulaires de login/signup
+   */
+  function setupAuthListeners() {
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+
+    // Gestion de la connexion
+    if (loginForm) {
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const pass = document.getElementById('login-pass').value;
+
+        try {
+          // Envoi des identifiants au backend
+          const res = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: pass })
+          });
+
+          const data = await res.json();
+          if (res.ok && data.access_token) {
+            // Connexion réussie : on sauvegarde le token et on met à jour l'UI
+            setAuthToken(data.access_token, data.user);
+            showToast('Connexion réussie !', 'success');
+            loginForm.reset();
+          } else {
+            showToast('Erreur : ' + (data.error || 'Identifiants invalides'), 'error');
+          }
+        } catch (err) {
+          showToast('Erreur réseau lors de la connexion', 'error');
+        }
+      });
+    }
+
+    // Gestion de l'inscription
+    if (signupForm) {
+      signupForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        // ... logique similaire au login (implémentation backend create_user)
+      });
+    }
+  }
+
+  /**
+   * Sauvegarde le token JWT dans le navigateur (localStorage)
+   * pour rester connecté même après rafraîchissement
+   */
+  function setAuthToken(token, userData) {
+    authToken = token;
+    user = userData;
+
+    if (token) {
+      localStorage.setItem('ams_auth_token', token);
+      localStorage.setItem('ams_user', JSON.stringify(userData));
+      updateUIState(true); // Passe l'interface en mode "Connecté"
+    } else {
+      localStorage.removeItem('ams_auth_token');
+      localStorage.removeItem('ams_user');
+      updateUIState(false); // Passe l'interface en mode "Invité"
+    }
+  }
+
+  /**
+   * Met à jour l'affichage selon si l'utilisateur est connecté ou non
+   * (Affiche/Masque les boutons Login, le Wallet, etc.)
+   */
+  function updateUIState(isLoggedIn) {
+    const loginPanel = document.getElementById('auth-section');
+    const userMenu = document.getElementById('user-menu'); // Si on en a un
+
+    if (isLoggedIn) {
+      if (loginPanel) loginPanel.classList.add('hidden');
+      // Active les fonctionnalités restreintes
+    } else {
+      if (loginPanel) loginPanel.classList.remove('hidden');
+    }
+  }
   // calculator bindings
   const amountEl = document.getElementById('calc-amount');
   const qtyEl = document.getElementById('calc-qty');
@@ -1324,75 +1493,70 @@ export async function loadWallet() {
 
 }
 
+// ---------------------------------------------------
+// Gestion du Portefeuille (Wallet) & Trading
+// ---------------------------------------------------
+
+/**
+ * Affiche l'état du portefeuille (Solde, Actifs détenus)
+ * Met à jour le DOM sans tout casser (pour garder le formulaire actif)
+ */
 export function renderWallet(w) {
 
   const cashEl = getWalletCashEl();
-
   const holdEl = getWalletHoldingsEl();
+  const valueEl = document.getElementById('wallet-value');
 
+  // Met à jour le solde Cash disponible
   if (cashEl) cashEl.textContent = w?.cash != null ? Number(w.cash).toFixed(2) : '-';
 
-  if (!holdEl) return;
+  // Calcul de la valeur totale estimée (Cash + Valeur des cryptos)
+  let totalVal = Number(w?.cash || 0);
 
-  // build a nicer wallet card: holdings + quick actions + tips
-  holdEl.innerHTML = '';
-  const container = document.createElement('div');
-  container.className = 'wallet-card';
+  // Affiche la liste des cryptos possédées
+  if (holdEl) {
+    holdEl.innerHTML = ''; // Nettoie la liste précédente
+    const h = w?.holdings || {};
+    const keys = Object.keys(h);
 
-  const left = document.createElement('div'); left.className = 'left';
-  const right = document.createElement('div'); right.className = 'right';
+    if (!keys.length) {
+      holdEl.innerHTML = '<div class="wallet-trade" style="text-align: center; color: var(--text-muted);">Aucune position active</div>';
+    } else {
+      keys.forEach(sym => {
+        // Récupère le prix actuel pour calculer la valorisation
+        let currentPrice = 0;
+        if (typeof allAssets !== 'undefined') {
+          const asset = allAssets.find(a => a.symbol === sym);
+          if (asset) currentPrice = Number(asset.priceUsd);
+        }
 
-  // holdings list
-  const h = w?.holdings || {};
-  const keys = Object.keys(h);
-  if (!keys.length) {
-    left.innerHTML = '<div class="status">Aucune position</div>';
-  } else {
-    keys.forEach(sym => {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.style.marginBottom = '8px';
-      card.innerHTML = `<strong>${sym}</strong><div>${Number(h[sym]).toFixed(8)} coins</div>`;
-      left.appendChild(card);
-    });
-  }
+        const qty = Number(h[sym]);
+        const val = qty * currentPrice;
+        if (currentPrice > 0) totalVal += val;
 
-  // right: enhance existing trade form with quick buttons and tips
-  const tradeForm = document.getElementById('wallet-trade-form');
-  if (tradeForm) {
-    // ensure trade form has nice spacing
-    tradeForm.classList.add('trade-form');
-    // quick percent buttons (only add once)
-    if (!tradeForm.querySelector('.quick-pct')) {
-      const pctWrap = document.createElement('div'); pctWrap.className = 'trade-actions quick-pct';
-      ['25%', '50%', '75%', '100%'].forEach(lbl => {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost'; b.textContent = lbl;
-        b.addEventListener('click', (e) => {
-          e.preventDefault();
-          const cash = Number(w?.cash) || 0;
-          const pct = Number(lbl.replace('%', '')) / 100;
-          const amountInput = document.getElementById('w-amount');
-          if (amountInput) amountInput.value = (cash * pct).toFixed(2);
-        });
-        pctWrap.appendChild(b);
+        // Crée l'élément HTML pour chaque ligne d'actif
+        const item = document.createElement('div');
+        item.className = 'holding-item';
+        item.innerHTML = `
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="background:var(--accent-blue-dim); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--accent-blue); font-weight:bold;">${sym[0]}</div>
+                <div>
+                    <div style="font-weight:bold;">${sym}</div>
+                    <div style="font-size:0.8rem; color:var(--text-secondary);">${qty.toFixed(6)} unités</div>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-weight:bold;">$${val > 0 ? val.toFixed(2) : '---'}</div>
+                <div style="font-size:0.8rem; color:var(--text-muted);">${currentPrice > 0 ? '@ $' + currentPrice.toFixed(2) : ''}</div>
+            </div>
+        `;
+        holdEl.appendChild(item);
       });
-      tradeForm.insertBefore(pctWrap, tradeForm.firstChild);
     }
-    // move form into right panel for card layout
-    right.appendChild(tradeForm);
-  } else {
-    right.innerHTML = '<div class="status">Formulaire de trading indisponible</div>';
   }
 
-  // tips section
-  const tips = document.createElement('div'); tips.className = 'tips';
-  tips.textContent = 'Conseils: Diversifiez vos positions, utilisez des ordres limités, et ne tradez qu’avec des montants que vous pouvez vous permettre de perdre.';
-  right.appendChild(tips);
-
-  container.appendChild(left);
-  container.appendChild(right);
-  holdEl.appendChild(container);
-
+  // Met à jour l'affichage de la Valeur Totale
+  if (valueEl) valueEl.textContent = totalVal.toFixed(2);
 }
 
 export function renderWalletHistory(h) {
@@ -1442,13 +1606,47 @@ if (tradeForm) tradeForm.addEventListener('submit', async (e) => {
 
     if (!r.ok) return alert('Erreur trade: ' + (j.error || r.status));
 
+    // Force exact refresh sequence
     await loadWallet();
 
-    alert('Trade exécuté');
+    // Refresh history specifically if separate function exists
+    if (typeof loadWalletHistory === 'function') {
+      const hRes = await fetch('/api/wallet/history', { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+      if (hRes.ok) {
+        const h = await hRes.json();
+        renderWalletHistory(h);
+      }
+    }
+
+    alert('Trade exécuté avec succès !');
+
+    // Reset form
+    document.getElementById('w-amount').value = '';
 
   } catch (e) { alert('Erreur: ' + e.message); }
 
 });
+
+
+// Toggle Panel Logic
+if (typeof document !== 'undefined') {
+  const toggles = document.querySelectorAll('.panel-toggle');
+  toggles.forEach(t => {
+    t.addEventListener('click', (e) => {
+      const content = t.nextElementSibling;
+      const icon = t.querySelector('.toggle-icon');
+      if (content) {
+        if (content.style.display === 'none') {
+          content.style.display = 'block'; // Show
+          if (icon) icon.className = 'fa fa-chevron-down toggle-icon';
+        } else {
+          content.style.display = 'none'; // Hide
+          if (icon) icon.className = 'fa fa-chevron-right toggle-icon';
+        }
+      }
+    });
+  });
+}
 
 // Exporte les fonctions principales pour les tests
 
@@ -1473,11 +1671,16 @@ export async function loadAlerts() {
   const alertsListEl = getAlertsList();
 
   if (!getAuthToken()) {
+    // Try fallback to localStorage
+    if (typeof localStorage !== 'undefined') {
+      const storedToken = localStorage.getItem('authToken');
+      if (storedToken) setAuthToken(storedToken); // Restore it
+    }
+  }
 
+  if (!getAuthToken()) {
     alertsListEl.innerHTML = '<div class="status">Connecte-toi pour voir tes alertes.</div>';
-
     return;
-
   }
 
   try {
@@ -1535,11 +1738,15 @@ export async function loadAlerts() {
 
 export async function deleteAlert(id) {
 
-  if (!getAuthToken()) return alert('Non authentifié');
+  // Check auth from memory or fallback to localStorage
+  let token = getAuthToken();
+  if (!token && typeof localStorage !== 'undefined') token = localStorage.getItem('authToken');
+
+  if (!token) return alert('Non authentifié');
 
   try {
 
-    const r = await fetch(`/api/alerts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getAuthToken()}` } });
+    const r = await fetch(`/api/alerts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
 
     if (r.status === 401) { setAuthToken(null); setAuthUser(null); showLoggedOut(); return alert('Non authentifié'); }
 
@@ -1576,7 +1783,7 @@ export function attachImportTimeListeners() {
 
     }
 
-    getAlertForm()?.addEventListener('submit', handleAlertFormSubmit);
+    // (redondant) getAlertForm()?.addEventListener('submit', handleAlertFormSubmit);
 
     getTabLogin()?.addEventListener('click', showLogin);
 
@@ -1778,5 +1985,96 @@ export async function loadCurrentUser() {
 
 }
 
+// Initialize app - check for existing auth and auto-login
+function initializeApplication() {
+  console.log('[INIT] Starting app initialization (renamed)');
 
-// (Plus de code d'exécution automatique à l'import)
+  // Check for existing token in localStorage
+  const token = localStorage.getItem('authToken');
+  const userStr = localStorage.getItem('authUser');
+
+  if (token && userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      console.log('[INIT] Found existing auth, auto-logging in', { email: user.email });
+
+      // Set auth state
+      authToken = token;
+      authUser = user;
+
+      // Show main panel
+      const mainPanel = document.getElementById('main-panel');
+      if (mainPanel) {
+        mainPanel.classList.remove('hidden');
+      }
+
+      // Update user email in header
+      const userEmailEl = document.getElementById('current-user-email');
+      if (userEmailEl && user.email) {
+        userEmailEl.textContent = `Connecté en tant que ${user.email}`;
+      }
+
+      // Load user data and assets
+      loadCurrentUser();
+      loadAssets();
+
+      // Enable restricted tabs for authenticated users
+      if (typeof document !== 'undefined') {
+        setTimeout(() => {
+          const restrictedTabs = document.querySelectorAll('.tab-btn[data-tab="alerts"], .tab-btn[data-tab="wallet"]');
+          console.log('[INIT] Enabling restricted tabs:', restrictedTabs.length);
+          restrictedTabs.forEach(btn => {
+            btn.removeAttribute('disabled');
+            btn.classList.remove('disabled');
+            btn.style.pointerEvents = 'auto'; // Force clickable
+            btn.style.opacity = '1'; // Force visible
+          });
+        }, 500); // Small delay to ensure DOM is ready
+      }
+
+      console.log('[INIT] Auto-login successful');
+    } catch (e) {
+      console.error('[INIT] Failed to parse stored auth', e);
+      // Clear invalid data
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      // Redirect to login
+      window.location.href = '/webui/';
+    }
+  } else {
+    console.log('[INIT] No existing auth found');
+    if (window.location.pathname.includes('home.html')) {
+      window.location.href = '/webui/';
+    }
+  }
+
+  // Setup logout button
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    // Remove old listeners to avoid duplicates
+    const newBtn = logoutBtn.cloneNode(true);
+    if (logoutBtn.parentNode) logoutBtn.parentNode.replaceChild(newBtn, logoutBtn);
+    newBtn.addEventListener('click', handleLogout);
+    console.log('[INIT] Logout button configured');
+  }
+}
+
+// Handle logout
+function handleLogout(e) {
+  if (e) e.preventDefault();
+  console.log('[AUTH] User logging out');
+
+  // Clear auth state
+  authToken = null;
+  authUser = null;
+
+  // Clear localStorage
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('authUser');
+
+  // Redirect to login
+  window.location.href = '/webui/';
+}
+
+// Export for use
+export { initializeApplication as initApp, handleLogout };

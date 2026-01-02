@@ -23,11 +23,34 @@
 }
 
 /* Sidebar collapsed by default */
-.sidebar {
-    padding-top: 80px;
-    z-index: 10000 !important;
-    transform: translateX(-280px) !important;
-    /* Hidden by default */
+/* Sidebar collapsed ONLY on mobile by default, or if class added */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-280px);
+        z-index: 10000;
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
+    }
+}
+
+@media (min-width: 769px) {
+    .sidebar {
+        z-index: 10000;
+        /* Start hidden off-screen to left */
+        transform: translateX(-100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        visibility: visible;
+        background: var(--bg-secondary);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .sidebar.show {
+        /* Slide in when 'show' class is present */
+        transform: translateX(0);
+    }
 }
 
 /* Show sidebar when toggle clicked */

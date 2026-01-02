@@ -1,0 +1,172 @@
+/* === PREDICTIONS PANEL === */
+.predictions-panel {
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+}
+
+.predictions-panel h3 {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    color: var(--color-text);
+}
+
+.predictions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.prediction-badge {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.prediction-badge:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(0, 212, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+.prediction-badge.highlight {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+    border-color: rgba(0, 212, 255, 0.4);
+}
+
+.badge-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.badge-value {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.badge-value.trend {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.badge-value.bullish {
+    color: #00ff88;
+}
+
+.badge-value.bearish {
+    color: #ff4757;
+}
+
+.badge-value.neutral {
+    color: #ffd93d;
+}
+
+.prediction-recommendation {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    border-left: 4px solid transparent;
+}
+
+.prediction-recommendation.buy {
+    border-left-color: #00ff88;
+}
+
+.prediction-recommendation.sell {
+    border-left-color: #ff4757;
+}
+
+.prediction-recommendation.hold {
+    border-left-color: #ffd93d;
+}
+
+.recommendation-badge {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.recommendation-label {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    text-transform: uppercase;
+}
+
+.recommendation-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.recommendation-value.buy {
+    color: #00ff88;
+    background: rgba(0, 255, 136, 0.15);
+}
+
+.recommendation-value.sell {
+    color: #ff4757;
+    background: rgba(255, 71, 87, 0.15);
+}
+
+.recommendation-value.hold {
+    color: #ffd93d;
+    background: rgba(255, 217, 61, 0.15);
+}
+
+.recommendation-confidence {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-muted);
+    text-transform: uppercase;
+}
+
+.recommendation-confidence.high {
+    color: #00ff88;
+    background: rgba(0, 255, 136, 0.1);
+}
+
+.recommendation-confidence.medium {
+    color: #ffd93d;
+    background: rgba(255, 217, 61, 0.1);
+}
+
+.recommendation-confidence.low {
+    color: #ff4757;
+    background: rgba(255, 71, 87, 0.1);
+}
+
+.prediction-note {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    margin: 0.5rem 0 0;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .predictions-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .recommendation-badge {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}

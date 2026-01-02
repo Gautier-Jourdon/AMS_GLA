@@ -1,14 +1,31 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
   <meta charset="UTF-8" />
   <title>AMS GLA - Crypto Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="layout-fix.css">
+  <meta name="description"
+    content="AMS GLA - Plateforme de surveillance et d'analyse des marchés de cryptomonnaies en temps réel">
+  <meta name="keywords" content="crypto, bitcoin, ethereum, trading, portfolio, alerts">
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%2300d4ff'/%3E%3Cstop offset='100%25' style='stop-color:%238b5cf6'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='20' fill='url(%23g)'/%3E%3Ctext x='50' y='70' font-family='Arial' font-size='50' font-weight='900' fill='%230a0e1a' text-anchor='middle'%3EAMS%3C/text%3E%3C/svg%3E">
 </head>
+
 <body>
+  <!-- Particle Background Canvas -->
+  <canvas id="particle-canvas"
+    style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:0.4"></canvas>
+
+  <!-- Sidebar Toggle Button -->
+  <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar" title="Toggle navigation">☰</button>
+
   <div id="app">
     <header class="app-header">
       <div class="brand">
@@ -19,18 +36,16 @@
         </div>
       </div>
       <div class="header-controls">
-        <div id="market-ticker" aria-live="polite" class="ticker">&nbsp;</div>
         <div class="user-area">
-          <span id="current-user" class="current-user"></span>
           <button id="logout-btn" class="btn ghost" title="Se déconnecter">Déconnexion</button>
-          <button id="theme-toggle" class="btn" title="Basculer thème" aria-pressed="false"><i class="fa fa-moon"></i></button>
+          <button id="theme-toggle" class="btn" title="Basculer thème" aria-pressed="false"><i
+              class="fa fa-moon"></i></button>
         </div>
       </div>
     </header>
 
     <main class="layout">
-      <div class="ad ad-left">PUBLICITÉ<br/>Crypto Ads</div>
-      <aside class="sidebar panel">
+      <aside class="sidebar panel hidden">
         <nav class="nav">
           <button class="tab-btn btn active" data-tab="table"><i class="fa fa-table"></i> Tableaux</button>
           <button class="tab-btn btn" data-tab="chart"><i class="fa fa-chart-line"></i> Graphiques</button>
@@ -41,180 +56,235 @@
         <div class="sidebar-note">Design modernisé • Interactif</div>
       </aside>
 
-      <div class="ad ad-right">PUBLICITÉ<br/>Crypto Ads</div>
-
-      <section id="login-signin-panel" class="content">
-        <div id="auth-area">
-          <h1>Connexion / Inscription</h1>
-          <div class="tabs">
-            <button id="tab-login" class="btn ghost active">Connexion</button>
-            <button id="tab-signup" class="btn ghost">Inscription</button>
+      <!-- Main content without login panel -->
+      <section id="main-panel" class="content panel panel-main">
+        <!-- Market Overview Stats -->
+        <div id="market-stats" class="market-stats"
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px;animation:fadeInUp 0.6s ease">
+          <div class="stat-card" id="stat-market-cap"
+            style="padding:24px;background:linear-gradient(135deg,rgba(0,212,255,0.08),rgba(0,212,255,0.02));border:1px solid rgba(0,212,255,0.2);border-radius:16px;text-align:center">
+            <div
+              style="font-size:0.85rem;color:#9aa4b2;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
+              Market Cap Total</div>
+            <div id="total-market-cap"
+              style="font-size:1.75rem;font-weight:900;background:linear-gradient(135deg,#00d4ff,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-family:'JetBrains Mono',monospace">
+              $0</div>
           </div>
+          <div class="stat-card" id="stat-volume"
+            style="padding:24px;background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(139,92,246,0.02));border:1px solid rgba(139,92,246,0.2);border-radius:16px;text-align:center">
+            <div
+              style="font-size:0.85rem;color:#9aa4b2;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
+              Volume 24h</div>
+            <div id="total-volume"
+              style="font-size:1.75rem;font-weight:900;background:linear-gradient(135deg,#8b5cf6,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-family:'JetBrains Mono',monospace">
+              $0</div>
+          </div>
+          <div class="stat-card" id="stat-btc-dominance"
+            style="padding:24px;background:linear-gradient(135deg,rgba(20,241,208,0.08),rgba(20,241,208,0.02));border:1px solid rgba(20,241,208,0.2);border-radius:16px;text-align:center">
+            <div
+              style="font-size:0.85rem;color:#9aa4b2;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
+              BTC Dominance</div>
+            <div id="btc-dominance"
+              style="font-size:1.75rem;font-weight:900;background:linear-gradient(135deg,#14f1d0,#00d4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-family:'JetBrains Mono',monospace">
+              0%</div>
+          </div>
+          <div class="stat-card" id="stat-assets"
+            style="padding:24px;background:linear-gradient(135deg,rgba(0,255,136,0.08),rgba(0,255,136,0.02));border:1px solid rgba(0,255,136,0.2);border-radius:16px;text-align:center">
+            <div
+              style="font-size:0.85rem;color:#9aa4b2;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">
+              Total Assets</div>
+            <div id="total-assets"
+              style="font-size:1.75rem;font-weight:900;background:linear-gradient(135deg,#00ff88,#00d4aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-family:'JetBrains Mono',monospace">
+              0</div>
+          </div>
+        </div>
 
-          <div id="login-panel" class="panel panel-login">
-            <form id="login-form">
+        <div class="panel-grid">
+          <section id="tab-table" class="tab-section visible">
+            <div class="section-header">
+              <h2>Liste des actifs</h2>
+              <div class="controls">
+                <input type="text" id="search" placeholder="Rechercher par nom ou symbole..." />
+                <button id="refresh-assets" class="btn ghost"><i class="fa fa-sync-alt"></i></button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="assets-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Symbole</th>
+                    <th>Nom</th>
+                    <th>Prix (USD)</th>
+                    <th>Variation 24h</th>
+                    <th>Tendance 7j</th>
+                    <th>Market Cap</th>
+                    <th>Volume 24h</th>
+                    <th>Supply</th>
+                    <th>Explorer</th>
+                  </tr>
+                </thead>
+                <tbody id="assets-body"></tbody>
+              </table>
+            </div>
+            <div id="loading" class="status">Chargement des données...</div>
+            <div id="error" class="status error hidden">Impossible de charger les données.</div>
+          </section>
+
+          <section id="tab-chart" class="tab-section hidden">
+            <div class="section-header">
+              <h2>Graphique du cours</h2>
+              <div class="chart-controls">
+                <label for="chart-crypto">Crypto :</label>
+                <select id="chart-crypto"></select>
+                <label for="chart-period">Période :</label>
+                <select id="chart-period">
+                  <option value="24h">24h</option>
+                  <option value="7d">7j</option>
+                  <option value="1m">1 mois</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Predictions Panel -->
+            <div class="predictions-panel card" id="predictions-panel" style="display: none;">
+              <h3>📈 Prévisions et Analyse</h3>
+              <div class="predictions-grid">
+                <div class="prediction-badge">
+                  <span class="badge-label">SMA 7j</span>
+                  <span class="badge-value" id="pred-sma7">--</span>
+                </div>
+                <div class="prediction-badge">
+                  <span class="badge-label">SMA 30j</span>
+                  <span class="badge-value" id="pred-sma30">--</span>
+                </div>
+                <div class="prediction-badge">
+                  <span class="badge-label">EMA 12</span>
+                  <span class="badge-value" id="pred-ema12">--</span>
+                </div>
+                <div class="prediction-badge">
+                  <span class="badge-label">EMA 26</span>
+                  <span class="badge-value" id="pred-ema26">--</span>
+                </div>
+                <div class="prediction-badge">
+                  <span class="badge-label">MACD</span>
+                  <span class="badge-value" id="pred-macd">--</span>
+                </div>
+                <div class="prediction-badge highlight">
+                  <span class="badge-label">Tendance</span>
+                  <span class="badge-value trend" id="pred-trend">--</span>
+                </div>
+              </div>
+              <div class="prediction-recommendation" id="pred-recommendation">
+                <div class="recommendation-badge">
+                  <span class="recommendation-label">Recommandation</span>
+                  <span class="recommendation-value" id="pred-action">--</span>
+                  <span class="recommendation-confidence" id="pred-confidence">--</span>
+                </div>
+                <p class="prediction-note" id="pred-note">Basé sur l'analyse des moyennes mobiles et régression linéaire
+                </p>
+              </div>
+            </div>
+
+            <canvas id="crypto-chart" width="800" height="400"></canvas>
+            <div class="calc" id="calc-panel">
+              <div class="calc-row">
+                <div class="field"><label>Montant USD</label><input id="calc-amount" type="number" step="any"
+                    placeholder="100" /></div>
+                <div class="field"><label>Quantité</label><input id="calc-qty" type="number" step="any"
+                    placeholder="(auto)" /></div>
+                <div class="field"><label>Prix cible (USD)</label><input id="calc-target" type="number" step="any"
+                    placeholder="--" /></div>
+                <button id="calc-swap" class="btn ghost">Basculer montant/qty</button>
+              </div>
+              <div class="calc-results" id="calc-results">Valeur actuelle: - · Valeur cible: - · Profit: - · ROI: -
+              </div>
+              <div class="calc-hint">Cliquez sur le graphique pour fixer automatiquement le prix cible.</div>
+            </div>
+          </section>
+
+          <section id="tab-detail" class="tab-section hidden">
+            <h2>Détail</h2>
+            <div id="crypto-detail"></div>
+          </section>
+
+          <section id="tab-alerts" class="tab-section hidden">
+            <h2>Mes alertes</h2>
+            <form id="alert-form" class="alert-form">
               <div class="form-row">
-                <label for="email">Email</label>
-                <input id="email" type="email" required />
+                <label for="alert-symbol">Symbole</label>
+                <input id="alert-symbol" placeholder="BTC" required />
               </div>
               <div class="form-row">
-                <label for="password">Mot de passe</label>
-                <input id="password" type="password" required />
+                <label for="alert-threshold">Seuil (USD)</label>
+                <input id="alert-threshold" type="number" step="any" min="0.0001" max="100000000000" required />
               </div>
-              <div id="login-error" class="error hidden"></div>
               <div class="form-row">
-                <button type="submit" class="btn primary">Se connecter</button>
+                <label for="alert-direction">Direction</label>
+                <select id="alert-direction">
+                  <option value="above">Au dessus</option>
+                  <option value="below">En dessous</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="alert-delivery">Livraison</label>
+                <select id="alert-delivery">
+                  <option value="email">Email</option>
+                  <option value="discord" disabled>Discord (non disponible)</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <button type="submit" class="btn primary">Créer</button>
               </div>
             </form>
-          </div>
+            <div id="alerts-list"></div>
+          </section>
 
-          <div id="signup-panel" class="panel panel-login hidden">
-            <form id="signup-form">
-              <div class="form-row">
-                <label for="su_email">Email</label>
-                <input id="su_email" type="email" required />
-              </div>
-              <div class="form-row">
-                <label for="su_password">Mot de passe</label>
-                <input id="su_password" type="password" required />
-              </div>
-              <div class="form-row">
-                <label for="su_password_confirm">Confirmer mot de passe</label>
-                <input id="su_password_confirm" type="password" required />
-              </div>
-              <div id="signup-error" class="error hidden"></div>
-              <div class="form-row">
-                <button type="submit" class="btn primary">S'inscrire</button>
-              </div>
+          <section id="tab-wallet" class="tab-section hidden">
+            <h2>Portefeuille virtuel</h2>
+            <div id="wallet-summary">
+              <div class="card">Solde USD: <span id="wallet-cash">-</span></div>
+              <div class="card">Valeur totale: <span id="wallet-value">-</span></div>
+            </div>
+            <div id="wallet-holdings"></div>
+            <h3>Trader</h3>
+            <form id="wallet-trade-form" class="wallet-form">
+              <select id="w-symbol">
+                <option value="">-- choisir --</option>
+              </select>
+              <select id="w-side">
+                <option value="buy">Achat</option>
+                <option value="sell">Vente</option>
+              </select>
+              <input id="w-amount" type="number" step="any" />
+              <button type="submit" class="btn primary">Exécuter</button>
             </form>
-          </div>
+            <h3>Historique</h3>
+            <div id="wallet-history"></div>
+          </section>
         </div>
-        </div>
+  </div>
+  </section>
+  </main>
 
-        <div id="main-panel" class="panel panel-main hidden">
-          <div class="panel-grid">
-            <section id="tab-table" class="tab-section visible">
-              <div class="section-header">
-                <h2>Liste des actifs</h2>
-                <div class="controls">
-                  <input type="text" id="search" placeholder="Rechercher par nom ou symbole..." />
-                  <button id="refresh-assets" class="btn ghost"><i class="fa fa-sync-alt"></i></button>
-                </div>
-              </div>
-              <div class="table-wrap">
-                <table id="assets-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Symbole</th>
-                      <th>Nom</th>
-                      <th>Prix (USD)</th>
-                      <th>Variation 24h</th>
-                      <th>Market Cap</th>
-                      <th>Volume 24h</th>
-                      <th>Supply</th>
-                      <th>Explorer</th>
-                    </tr>
-                  </thead>
-                  <tbody id="assets-body"></tbody>
-                </table>
-              </div>
-              <div id="loading" class="status">Chargement des données...</div>
-              <div id="error" class="status error hidden">Impossible de charger les données.</div>
-            </section>
-
-            <section id="tab-chart" class="tab-section hidden">
-              <div class="section-header">
-                <h2>Graphique du cours</h2>
-                <div class="chart-controls">
-                  <label for="chart-crypto">Crypto :</label>
-                  <select id="chart-crypto"></select>
-                  <label for="chart-period">Période :</label>
-                  <select id="chart-period">
-                    <option value="24h">24h</option>
-                    <option value="7d">7j</option>
-                    <option value="1m">1 mois</option>
-                  </select>
-                </div>
-              </div>
-              <canvas id="crypto-chart" width="800" height="400"></canvas>
-              <div class="calc" id="calc-panel">
-                <div class="calc-row">
-                  <div class="field"><label>Montant USD</label><input id="calc-amount" type="number" step="any" placeholder="100" /></div>
-                  <div class="field"><label>Quantité</label><input id="calc-qty" type="number" step="any" placeholder="(auto)" /></div>
-                  <div class="field"><label>Prix cible (USD)</label><input id="calc-target" type="number" step="any" placeholder="--" /></div>
-                  <button id="calc-swap" class="btn ghost">Basculer montant/qty</button>
-                </div>
-                <div class="calc-results" id="calc-results">Valeur actuelle: - · Valeur cible: - · Profit: - · ROI: -</div>
-                <div class="calc-hint">Cliquez sur le graphique pour fixer automatiquement le prix cible.</div>
-              </div>
-            </section>
-
-            <section id="tab-detail" class="tab-section hidden">
-              <h2>Détail</h2>
-              <div id="crypto-detail"></div>
-            </section>
-
-            <section id="tab-alerts" class="tab-section hidden">
-              <h2>Mes alertes</h2>
-              <form id="alert-form" class="alert-form">
-                <div class="form-row">
-                  <label for="alert-symbol">Symbole</label>
-                  <input id="alert-symbol" placeholder="BTC" required />
-                </div>
-                <div class="form-row">
-                  <label for="alert-threshold">Seuil (USD)</label>
-                  <input id="alert-threshold" type="number" step="any" min="0.0001" max="100000000000" required />
-                </div>
-                <div class="form-row">
-                  <label for="alert-direction">Direction</label>
-                  <select id="alert-direction"><option value="above">Au dessus</option><option value="below">En dessous</option></select>
-                </div>
-                <div class="form-row">
-                  <label for="alert-delivery">Livraison</label>
-                  <select id="alert-delivery"><option value="email">Email</option><option value="discord" disabled>Discord (non disponible)</option></select>
-                </div>
-                <div class="form-row">
-                  <button type="submit" class="btn primary">Créer</button>
-                </div>
-              </form>
-              <div id="alerts-list"></div>
-            </section>
-
-            <section id="tab-wallet" class="tab-section hidden">
-              <h2>Portefeuille virtuel</h2>
-              <div id="wallet-summary">
-                <div class="card">Solde USD: <span id="wallet-cash">-</span></div>
-                <div class="card">Valeur totale: <span id="wallet-value">-</span></div>
-              </div>
-              <div id="wallet-holdings"></div>
-              <h3>Trader</h3>
-              <form id="wallet-trade-form" class="wallet-form">
-                <select id="w-symbol"><option value="">-- choisir --</option></select>
-                <select id="w-side"><option value="buy">Achat</option><option value="sell">Vente</option></select>
-                <input id="w-amount" type="number" step="any" />
-                <button type="submit" class="btn primary">Exécuter</button>
-              </form>
-              <h3>Historique</h3>
-              <div id="wallet-history"></div>
-            </section>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <div id="asset-modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-content">
-        <button class="modal-close btn ghost" aria-label="Fermer">×</button>
-        <div id="modal-body"></div>
-      </div>
+  <div id="asset-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-content">
+      <button class="modal-close btn ghost" aria-label="Fermer">×</button>
+      <div id="modal-body"></div>
     </div>
+  </div>
 
   </div>
 
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js" crossorigin="anonymous"></script>
+
+  <!-- App Scripts -->
+  <script type="module" src="animations.js"></script>
+  <script type="module" src="sidebar-toggle.js"></script>
   <script type="module" src="app.js"></script>
 </body>
+
 </html>
 
 <!-- Blocking modal used to show critical connection/auth errors -->

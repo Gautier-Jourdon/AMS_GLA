@@ -1,4 +1,5 @@
 
+
 // Getters for DOM elements and globals (exported for tests)
 export function getLoginPanel() {
   return typeof global !== 'undefined' && global.loginPanel
@@ -7,6 +8,13 @@ export function getLoginPanel() {
       ? window.loginPanel
       : (typeof document !== 'undefined' ? document.getElementById('login-panel') : null);
 }
+
+// Auth state - declared early to avoid initialization errors
+let authToken = null;
+let authUser = null;
+
+// Inactivity timeout - declared early to avoid initialization errors
+let inactivityTimeout = null;
 
 // Auto-initialize UI when the DOM is ready so auth wiring runs in the browser
 if (typeof window !== 'undefined') {
@@ -89,10 +97,11 @@ export function getAlertsListEl() {
 
 let allAssets = [];
 
-// auth token and user read from localStorage at import-time but exposed via helpers
-let authToken = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_token')) || null;
+// auth token and user initialized from localStorage
+// (already declared at top of file)
+authToken = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_token')) || null;
 
-let authUser = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_user')) ? JSON.parse(localStorage.getItem('supabase_user')) : null;
+authUser = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_user')) ? JSON.parse(localStorage.getItem('supabase_user')) : null;
 
 export function getAuthToken() {
   return (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_token')) || authToken;
@@ -120,12 +129,12 @@ export function setAuthUser(user) {
 
 
 // Gère l'import dynamique du module session (pour tests)
-function importSessionModule(){ try { window.Session = window.Session || null; } catch(e){} }
+function importSessionModule() { try { window.Session = window.Session || null; } catch (e) { } }
 importSessionModule();
 let session = null;
 
 // For tests: allow setting assets from outside
-export function setAllAssets(arr){ allAssets = Array.isArray(arr) ? arr : []; }
+export function setAllAssets(arr) { allAssets = Array.isArray(arr) ? arr : []; }
 
 
 // Formate un nombre pour affichage (2 décimales, FR)
@@ -145,10 +154,10 @@ export function formatPercent(num) {
 }
 
 // small debounce helper for input events (UI only)
-export function debounce(fn, wait = 180){ let t = null; return function(...args){ clearTimeout(t); t = setTimeout(()=> fn.apply(this,args), wait); }; }
+export function debounce(fn, wait = 180) { let t = null; return function (...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), wait); }; }
 
 // modal helpers for asset details
-export function openAssetModal(html){
+export function openAssetModal(html) {
   if (typeof document === 'undefined') return;
   const m = document.getElementById('asset-modal');
   const body = document.getElementById('modal-body');
@@ -156,7 +165,7 @@ export function openAssetModal(html){
   body.innerHTML = html;
   m.classList.remove('hidden');
 }
-export function closeAssetModal(){ if (typeof document === 'undefined') return; const m = document.getElementById('asset-modal'); if (!m) return; m.classList.add('hidden'); }
+export function closeAssetModal() { if (typeof document === 'undefined') return; const m = document.getElementById('asset-modal'); if (!m) return; m.classList.add('hidden'); }
 
 // Affiche le tableau des assets
 export function renderTable(assets, targetTableBody) {
@@ -173,23 +182,71 @@ export function renderTable(assets, targetTableBody) {
 
     const changeHtml = formatPercent(asset.changePercent24Hr);
 
+    // Generate sparkline data (mock 7-day trend)
+    const sparklineData = generateMockHistory(asset.priceUsd || 1, 7);
+    const sparklineColor = (asset.changePercent24Hr >= 0) ? '#00ff88' : '#ff4757';
+
     tr.innerHTML = `
       <td>${asset.rank ?? index + 1}</td>
-      <td>${asset.symbol}</td>
+      <td style="font-weight:700;color:var(--accent-blue)">${asset.symbol}</td>
       <td>${asset.name}</td>
-      <td>${formatNumber(asset.priceUsd)}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-weight:600">$${formatNumber(asset.priceUsd)}</td>
       <td>${changeHtml}</td>
-      <td>${formatNumber(asset.marketCapUsd)}</td>
-      <td>${formatNumber(asset.volumeUsd24Hr)}</td>
+      <td><div class="sparkline-container" data-sparkline="${sparklineData.join(',')}" data-color="${sparklineColor}"></div></td>
+      <td>$${formatNumber(asset.marketCapUsd)}</td>
+      <td>$${formatNumber(asset.volumeUsd24Hr)}</td>
       <td>${formatNumber(asset.supply)}</td>
-      <td>${asset.maxSupply ? formatNumber(asset.maxSupply) : "-"}</td>
-      <td>${asset.explorer ? `<a href="${asset.explorer}" target="_blank" rel="noreferrer">Lien</a>` : "-"}</td>
+      <td>${asset.explorer ? `<a href="${asset.explorer}" target="_blank" rel="noreferrer" style="color:var(--accent-teal);text-decoration:none;font-weight:600">Explorer</a>` : "-"}</td>
     `;
 
     body.appendChild(tr);
 
+    // Render sparkline after appending (using imported function if available)
+    if (typeof document !== 'undefined') {
+      const sparklineContainer = tr.querySelector('.sparkline-container');
+      if (sparklineContainer && typeof window !== 'undefined' && window.createSparkline) {
+        window.createSparkline(sparklineContainer, sparklineData, sparklineColor);
+      } else if (sparklineContainer) {
+        // Fallback: create simple inline sparkline
+        createInlineSparkline(sparklineContainer, sparklineData, sparklineColor);
+      }
+    }
+
   });
 
+}
+
+// Simple inline sparkline creator (fallback)
+function createInlineSparkline(container, data, color) {
+  if (!container || !data || data.length === 0) return;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 80;
+  canvas.height = 30;
+  canvas.style.display = 'block';
+
+  const ctx = canvas.getContext('2d');
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+
+  ctx.beginPath();
+  data.forEach((value, i) => {
+    const x = (i / (data.length - 1)) * canvas.width;
+    const y = canvas.height - ((value - min) / range) * canvas.height;
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  container.appendChild(canvas);
 }
 
 export async function loadAssets() {
@@ -220,8 +277,11 @@ export async function loadAssets() {
 
     renderTable(allAssets);
 
+    // Update market statistics
+    try { updateMarketStats(allAssets); } catch (e) { console.warn('updateMarketStats failed', e); }
+
     populateChartSelect(allAssets);
-    try { populateWalletSymbolSelect(allAssets); } catch(e) { /* non-fatal */ }
+    try { populateWalletSymbolSelect(allAssets); } catch (e) { /* non-fatal */ }
 
   } catch (err) {
 
@@ -282,6 +342,76 @@ export function populateWalletSymbolSelect(assets) {
   });
 }
 
+// Calculate and update market statistics
+export function updateMarketStats(assets) {
+  if (typeof document === 'undefined' || !assets || assets.length === 0) return;
+
+  try {
+    // Calculate total market cap
+    const totalMarketCap = assets.reduce((sum, asset) => {
+      return sum + (parseFloat(asset.marketCapUsd) || 0);
+    }, 0);
+
+    // Calculate total 24h volume
+    const totalVolume = assets.reduce((sum, asset) => {
+      return sum + (parseFloat(asset.volumeUsd24Hr) || 0);
+    }, 0);
+
+    // Calculate BTC dominance
+    const btc = assets.find(a => a.symbol === 'BTC');
+    const btcDominance = btc && totalMarketCap > 0
+      ? ((parseFloat(btc.marketCapUsd) || 0) / totalMarketCap * 100)
+      : 0;
+
+    // Update DOM elements with animation
+    const marketCapEl = document.getElementById('total-market-cap');
+    const volumeEl = document.getElementById('total-volume');
+    const btcDomEl = document.getElementById('btc-dominance');
+    const assetsEl = document.getElementById('total-assets');
+
+    if (marketCapEl) {
+      const formatted = '$' + (totalMarketCap / 1e12).toFixed(2) + 'T';
+      marketCapEl.textContent = formatted;
+    }
+
+    if (volumeEl) {
+      const formatted = '$' + (totalVolume / 1e9).toFixed(2) + 'B';
+      volumeEl.textContent = formatted;
+    }
+
+    if (btcDomEl) {
+      btcDomEl.textContent = btcDominance.toFixed(2) + '%';
+    }
+
+    if (assetsEl) {
+      assetsEl.textContent = assets.length.toString();
+    }
+
+    // Update ticker with top cryptos
+    updateTicker(assets.slice(0, 10));
+
+  } catch (e) {
+    console.warn('Failed to update market stats:', e);
+  }
+}
+
+// Update ticker with top crypto prices
+function updateTicker(topAssets) {
+  if (typeof document === 'undefined' || !topAssets) return;
+
+  const ticker = document.getElementById('market-ticker');
+  if (!ticker) return;
+
+  const tickerText = topAssets.map(asset => {
+    const change = parseFloat(asset.changePercent24Hr) || 0;
+    const arrow = change >= 0 ? '↑' : '↓';
+    const price = parseFloat(asset.priceUsd) || 0;
+    return `${asset.symbol} $${price.toFixed(2)} ${arrow}${Math.abs(change).toFixed(2)}%`;
+  }).join('  •  ');
+
+  ticker.textContent = tickerText + '  •  ' + tickerText; // Duplicate for smooth scroll
+}
+
 
 // Affiche l'onglet sélectionné
 // get tab buttons from globals or document
@@ -320,10 +450,10 @@ export function switchToTab(name) {
 
   try {
     if (name === 'wallet') {
-      try { populateWalletSymbolSelect(allAssets); } catch(e) {}
+      try { populateWalletSymbolSelect(allAssets); } catch (e) { }
       if (typeof loadWallet === 'function') loadWallet();
     }
-  } catch (e) {}
+  } catch (e) { }
 
 }
 
@@ -362,7 +492,7 @@ if (typeof document !== 'undefined') {
   if (tLogin) tLogin.addEventListener('click', (e) => { e.preventDefault(); showLoginForm(); });
   if (tSignup) tSignup.addEventListener('click', (e) => { e.preventDefault(); showSignupForm(); });
   // ensure initial state: login panel visible, signup hidden
-  try { const sp = document.getElementById('signup-panel'); if (sp && !sp.classList.contains('hidden')) showLoginForm(); } catch(e) { /* ignore */ }
+  try { const sp = document.getElementById('signup-panel'); if (sp && !sp.classList.contains('hidden')) showLoginForm(); } catch (e) { /* ignore */ }
 }
 
 // Prevent alerts creation when not authenticated and handle form submit
@@ -381,7 +511,7 @@ if (typeof document !== 'undefined') {
       if (msg) msg.textContent = 'Vous devez être connecté pour gérer vos alertes. Connectez-vous ou créez un compte.';
       if (bm) bm.classList.remove('hidden');
       // switch to auth area
-      try { showLoginForm(); } catch(e){}
+      try { showLoginForm(); } catch (e) { }
     }
   });
   if (alertForm) {
@@ -401,25 +531,25 @@ if (typeof document !== 'undefined') {
       if (!symbol || symbol.length < 1) { alert('Symbole requis'); return; }
       const thr = Number(threshold);
       if (!isFinite(thr) || thr <= 0 || thr > 1e12) { alert('Seuil invalide'); return; }
-      if (!['above','below'].includes(direction)) { alert('Direction invalide'); return; }
+      if (!['above', 'below'].includes(direction)) { alert('Direction invalide'); return; }
       // disable submit to avoid duplicate submissions
       const submitBtn = alertForm.querySelector('button[type=submit]');
       if (submitBtn) submitBtn.disabled = true;
       try {
         const opts = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': getAuthToken() ? ('Bearer ' + getAuthToken()) : '' }, body: JSON.stringify({ symbol: symbol.trim().toUpperCase(), threshold: thr, direction, delivery_method: delivery }) };
-        console.debug('[UI] posting alert to /api/alerts', { opts: { method: opts.method, headers: Object.keys(opts.headers), bodyPreview: (opts.body || '').slice(0,200) } });
+        console.debug('[UI] posting alert to /api/alerts', { opts: { method: opts.method, headers: Object.keys(opts.headers), bodyPreview: (opts.body || '').slice(0, 200) } });
         const resp = await fetchWithBlocking('/api/alerts', opts, { onRetry: null });
         console.debug('[UI] /api/alerts response', { status: resp && resp.status });
         if (!resp.ok) {
-          const j = await resp.json().catch(()=>({ error: 'unknown' }));
+          const j = await resp.json().catch(() => ({ error: 'unknown' }));
           console.warn('[UI] alert create failed', { status: resp.status, body: j });
           alert('Erreur création alerte: ' + (j && j.error ? j.error : resp.status));
         } else {
-          const j = await resp.json().catch(()=>null);
+          const j = await resp.json().catch(() => null);
           console.info('[UI] alert created', { row: j });
           alert('Alerte créée. Un email de confirmation a été envoyé si applicable.');
           // refresh alerts list if any
-          try { loadAlerts && loadAlerts(); } catch(e){ console.warn('loadAlerts failed', e); }
+          try { loadAlerts && loadAlerts(); } catch (e) { console.warn('loadAlerts failed', e); }
         }
       } catch (e) {
         console.error('alert submit failed', e);
@@ -433,11 +563,11 @@ if (typeof document !== 'undefined') {
 
 
 // Génère un historique de prix fictif pour les graphiques
-export function generateMockHistory(price, points){
+export function generateMockHistory(price, points) {
   const arr = [];
   let p = Number(price) || 1;
-  for(let i=0;i<points;i++){
-    const noise = (Math.random()-0.5) * p * 0.02;
+  for (let i = 0; i < points; i++) {
+    const noise = (Math.random() - 0.5) * p * 0.02;
     p = Math.max(0.000001, p + noise);
     arr.push(Number(p.toFixed(6)));
   }
@@ -467,23 +597,109 @@ export function renderChartFor(symbol, period) {
 
   if (window.cryptoChart && typeof window.cryptoChart.destroy === 'function') window.cryptoChart.destroy();
 
+  // Create gradient for chart
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, 'rgba(0, 212, 255, 0.4)');
+  gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.2)');
+  gradient.addColorStop(1, 'rgba(139, 92, 246, 0.05)');
+
   window.cryptoChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
-      datasets: [{ label: `${asset.symbol} price (USD)`, data: history, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.12)', tension: 0.15 }]
+      datasets: [{
+        label: `${asset.symbol} Prix (USD)`,
+        data: history,
+        borderColor: '#00d4ff',
+        backgroundColor: gradient,
+        borderWidth: 3,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 6,
+        pointHoverBackgroundColor: '#00d4ff',
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        fill: true
+      }]
     },
     options: {
-      plugins: { legend: { display: true } },
-      scales: { x: { display: true }, y: { display: true } },
-      onClick: function(evt, elements){
-        try{
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: {
+        intersect: false,
+        mode: 'index'
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: '#e6eef8',
+            font: { size: 14, weight: '600' },
+            padding: 16
+          }
+        },
+        tooltip: {
+          enabled: true,
+          backgroundColor: 'rgba(15, 23, 36, 0.95)',
+          titleColor: '#00d4ff',
+          bodyColor: '#e6eef8',
+          borderColor: '#00d4ff',
+          borderWidth: 1,
+          padding: 12,
+          displayColors: false,
+          titleFont: { size: 14, weight: '700' },
+          bodyFont: { size: 13, weight: '600' },
+          callbacks: {
+            label: function (context) {
+              return 'Prix: $' + context.parsed.y.toFixed(6);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          display: true,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#9aa4b2',
+            font: { size: 11 },
+            maxRotation: 0,
+            autoSkipPadding: 20
+          }
+        },
+        y: {
+          display: true,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.05)',
+            drawBorder: false
+          },
+          ticks: {
+            color: '#9aa4b2',
+            font: { size: 11, family: "'JetBrains Mono', monospace" },
+            callback: function (value) {
+              return '$' + value.toFixed(2);
+            }
+          }
+        }
+      },
+      onClick: function (evt, elements) {
+        try {
           if (!elements || !elements.length) return;
           const idx = elements[0].index;
           const priceAt = history[idx];
           const targetInput = document.getElementById('calc-target');
-          if (targetInput) { targetInput.value = priceAt; updateCalculatorForSymbol(asset.symbol); }
-        }catch(e){}
+          if (targetInput) {
+            targetInput.value = priceAt;
+            updateCalculatorForSymbol(asset.symbol);
+          }
+        } catch (e) { }
+      },
+      animation: {
+        duration: 750,
+        easing: 'easeInOutQuart'
       }
     }
   });
@@ -499,7 +715,7 @@ if (getChartSelect()) {
 }
 
 // Calculator logic: compute qty/current value/target value/profit
-export function updateCalculatorForSymbol(symbol){
+export function updateCalculatorForSymbol(symbol) {
   if (typeof document === 'undefined') return;
   const amountEl = document.getElementById('calc-amount');
   const qtyEl = document.getElementById('calc-qty');
@@ -576,13 +792,34 @@ export function showLoggedIn() {
   if (!loginPanel_ || !mainPanel_) return;
 
   // hide login panel and ensure main UI is visible
-  try { loginPanel_.classList.add('hidden'); } catch (e) {}
-  try { mainPanel_.classList.remove('hidden'); } catch (e) {}
+  try { loginPanel_.classList.add('hidden'); } catch (e) { }
+  try { mainPanel_.classList.remove('hidden'); } catch (e) { }
 
-  // hide the entire auth area (title + tabs) when logged in
-  try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.add('hidden'); } catch(e){}
-  // also hide the containing #login-signin-panel if present
-  try { const loginPanelWrap = document.getElementById('login-signin-panel'); if (loginPanelWrap) loginPanelWrap.classList.add('hidden'); } catch(e){}
+  // hide the entire auth area (title + tabs + panels) when logged in
+  try {
+    const authArea = document.getElementById('auth-area');
+    if (authArea) {
+      authArea.classList.add('hidden');
+      authArea.style.display = 'none'; // Force hide
+    }
+  } catch (e) { }
+
+  // also hide the containing #login-signin-panel if present - FORCE with inline style
+  try {
+    const loginPanelWrap = document.getElementById('login-signin-panel');
+    if (loginPanelWrap) {
+      loginPanelWrap.classList.add('hidden');
+      loginPanelWrap.style.display = 'none'; // Force inline style
+    }
+  } catch (e) { }
+
+  // Show sidebar when logged in
+  try {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      sidebar.classList.remove('hidden');
+    }
+  } catch (e) { }
 
   if (currentUserSpan_) currentUserSpan_.textContent = getAuthUser() ? (getAuthUser().email || getAuthUser().id) : 'connecté';
 
@@ -590,7 +827,7 @@ export function showLoggedIn() {
 
   if (typeof startSessionTimer === 'function') startSessionTimer();
 
-  try { updateAuthControls(); } catch(e){}
+  try { updateAuthControls(); } catch (e) { }
 
 }
 
@@ -607,15 +844,37 @@ export function showLoggedOut() {
   if (!loginPanel_ || !mainPanel_) return;
 
   // when logged out, show auth area and login panel, hide main interface
-  try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); } catch(e){}
-  try { loginPanel_.classList.remove('hidden'); } catch(e){}
-  try { mainPanel_.classList.add('hidden'); } catch(e){}
+  try {
+    const authArea = document.getElementById('auth-area');
+    if (authArea) {
+      authArea.classList.remove('hidden');
+      authArea.style.display = ''; // Reset inline style
+    }
+  } catch (e) { }
+
+  try { loginPanel_.classList.remove('hidden'); } catch (e) { }
+  try { mainPanel_.classList.add('hidden'); } catch (e) { }
   if (currentUserSpan_) currentUserSpan_.textContent = 'Visiteur';
-  // ensure #login-signin-panel visible when logged out
-  try { const loginPanelWrap = document.getElementById('login-signin-panel'); if (loginPanelWrap) loginPanelWrap.classList.remove('hidden'); } catch(e){}
+
+  // ensure #login-signin-panel visible when logged out - reset inline style
+  try {
+    const loginPanelWrap = document.getElementById('login-signin-panel');
+    if (loginPanelWrap) {
+      loginPanelWrap.classList.remove('hidden');
+      loginPanelWrap.style.display = ''; // Reset inline style
+    }
+  } catch (e) { }
+
+  // Hide sidebar when logged out
+  try {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      sidebar.classList.add('hidden');
+    }
+  } catch (e) { }
 
   if (typeof stopSessionTimer === 'function') stopSessionTimer();
-  try { updateAuthControls(); } catch(e){}
+  try { updateAuthControls(); } catch (e) { }
 
 }
 
@@ -663,7 +922,6 @@ export async function doSignup(email, password) {
 
 
 // Gère la déconnexion automatique après 30s d'inactivité
-let inactivityTimeout = null;
 // inactivity management
 export function resetInactivity() {
 
@@ -698,7 +956,7 @@ export function doLogout(auto = false) {
   console.debug('[UI] doLogout start', { auto });
   try {
     // ask server to clear any Supabase cookies
-    try { fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(()=>{}); } catch(e) {}
+    try { fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => { }); } catch (e) { }
   } catch (e) { console.debug('[UI] logout proxy call failed', e); }
 
   setAuthToken(null);
@@ -714,7 +972,7 @@ export function doLogout(auto = false) {
   try { updateAuthControls(); } catch (e) { console.debug('updateAuthControls failed', e); }
 
   // force reload to ensure any cookie-based session is cleared in the browser
-  try { console.info('[UI] forcing reload to ensure logout'); window.location.reload(); } catch(e) { console.debug('reload failed', e); }
+  try { console.info('[UI] forcing reload to ensure logout'); window.location.reload(); } catch (e) { console.debug('reload failed', e); }
 
   if (auto && typeof alert !== 'undefined') alert('Vous avez été déconnecté pour cause d\'inactivité (30s)');
 
@@ -839,30 +1097,30 @@ export function wireAuthUI() {
   if (hasSignupVisible) showSignupTab(); else showLoginTab();
 
   // ensure logout/login button and restricted tabs are in correct state
-  try { updateAuthControls(); } catch (e) {}
+  try { updateAuthControls(); } catch (e) { }
 
 }
 
 // Update header auth button and restricted tabs based on login state
-export function updateAuthControls(){
+export function updateAuthControls() {
   if (typeof document === 'undefined') return;
   const logoutBtn = document.getElementById('logout-btn');
   const currentUserSpan_ = getCurrentUserSpan();
   const isAuthed = Boolean(getAuthToken());
-  if (isAuthed){
-    if (logoutBtn){ logoutBtn.textContent = 'Déconnexion'; logoutBtn.classList.remove('ghost'); logoutBtn.onclick = (e)=>{ e.preventDefault(); doLogout(false); } }
+  if (isAuthed) {
+    if (logoutBtn) { logoutBtn.textContent = 'Déconnexion'; logoutBtn.classList.remove('ghost'); logoutBtn.onclick = (e) => { e.preventDefault(); doLogout(false); } }
     if (currentUserSpan_) currentUserSpan_.textContent = getAuthUser() ? (getAuthUser().email || getAuthUser().id) : 'connecté';
     // enable tabs
-    try{ getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.removeAttribute('disabled'); b.classList.remove('disabled'); } }); }catch(e){}
+    try { getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.removeAttribute('disabled'); b.classList.remove('disabled'); } }); } catch (e) { }
     // hide auth area (title, tabs, login/signup panels)
-    try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.add('hidden'); } catch(e){}
+    try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.add('hidden'); } catch (e) { }
   } else {
-    if (logoutBtn){ logoutBtn.textContent = 'Se connecter'; logoutBtn.classList.add('ghost'); logoutBtn.onclick = (e)=>{ e.preventDefault(); const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); showLoginForm(); } }
+    if (logoutBtn) { logoutBtn.textContent = 'Se connecter'; logoutBtn.classList.add('ghost'); logoutBtn.onclick = (e) => { e.preventDefault(); const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); showLoginForm(); } }
     if (currentUserSpan_) currentUserSpan_.textContent = 'Visiteur';
     // disable restricted tabs
-    try{ getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.setAttribute('disabled','true'); b.classList.add('disabled'); } }); }catch(e){}
+    try { getTabButtons().forEach(b => { if (b.dataset && (b.dataset.tab === 'alerts' || b.dataset.tab === 'wallet')) { b.setAttribute('disabled', 'true'); b.classList.add('disabled'); } }); } catch (e) { }
     // ensure auth area visible when logged out
-    try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); } catch(e){}
+    try { const authArea = document.getElementById('auth-area'); if (authArea) authArea.classList.remove('hidden'); } catch (e) { }
   }
 }
 
@@ -891,13 +1149,13 @@ export function startTicker(intervalMs = 2500) {
   _tickerInterval = setInterval(tick, intervalMs);
 }
 
-export function stopTicker(){ if (_tickerInterval) { clearInterval(_tickerInterval); _tickerInterval = null; } }
+export function stopTicker() { if (_tickerInterval) { clearInterval(_tickerInterval); _tickerInterval = null; } }
 
 export function toggleTheme() {
   if (typeof document === 'undefined') return;
   const body = document.body;
   const isLight = body.classList.toggle('theme-light');
-  try { localStorage.setItem('theme_light', isLight ? '1' : '0'); } catch (e) {}
+  try { localStorage.setItem('theme_light', isLight ? '1' : '0'); } catch (e) { }
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.setAttribute('aria-pressed', String(Boolean(isLight)));
 }
@@ -908,19 +1166,19 @@ export function initUIEnhancements() {
   try {
     const pref = localStorage.getItem('theme_light');
     if (pref === '1') document.body.classList.add('theme-light');
-  } catch (e) {}
+  } catch (e) { }
 
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.addEventListener('click', toggleTheme);
 
   // start a soft market ticker
   startTicker();
-  
+
   // modal close handler
   const modal = document.getElementById('asset-modal');
   if (modal) {
-    modal.querySelectorAll('.modal-close').forEach(b => b.addEventListener('click', (e)=>{ e.preventDefault(); closeAssetModal(); }));
-    modal.addEventListener('click', (e)=>{ if (e.target === modal) closeAssetModal(); });
+    modal.querySelectorAll('.modal-close').forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); closeAssetModal(); }));
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeAssetModal(); });
   }
 
   // clickable table rows -> show quick details modal
@@ -934,22 +1192,22 @@ export function initUIEnhancements() {
     const html = `<div style="display:flex;gap:12px;align-items:center"><div style="flex:1"><h3>${asset?.symbol} — ${asset?.name}</h3><div>Prix: ${formatNumber(asset?.priceUsd)} USD</div><div>Variation 24h: ${formatPercent(asset?.changePercent24Hr)}</div><div>Market Cap: ${formatNumber(asset?.marketCapUsd)}</div></div><div style="width:420px"><canvas id="modal-chart" width="420" height="180"></canvas></div></div>`;
     openAssetModal(html);
     // render mini chart
-    setTimeout(()=>{
-      try{
+    setTimeout(() => {
+      try {
         const canvas = document.getElementById('modal-chart');
-        if (canvas){
+        if (canvas) {
           const ctx = canvas.getContext('2d');
           const history = generateMockHistory(asset?.priceUsd || 1, 36);
           if (window.modalChart && typeof window.modalChart.destroy === 'function') window.modalChart.destroy();
-          window.modalChart = new Chart(ctx, { type:'line', data:{ labels:history.map((_,i)=>i), datasets:[{ data:history, borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,0.08)', tension:0.25 }] }, options:{plugins:{legend:{display:false}},scales:{x:{display:false}} } });
+          window.modalChart = new Chart(ctx, { type: 'line', data: { labels: history.map((_, i) => i), datasets: [{ data: history, borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.08)', tension: 0.25 }] }, options: { plugins: { legend: { display: false } }, scales: { x: { display: false } } } });
         }
-      }catch(_){/* ignore */}
+      } catch (_) {/* ignore */ }
     }, 50);
   });
 
   // refresh button
   const refresh = document.getElementById('refresh-assets');
-  if (refresh) refresh.addEventListener('click', (e)=>{ e.preventDefault(); loadAssets(); });
+  if (refresh) refresh.addEventListener('click', (e) => { e.preventDefault(); loadAssets(); });
 
   // calculator bindings
   const amountEl = document.getElementById('calc-amount');
@@ -957,12 +1215,12 @@ export function initUIEnhancements() {
   const targetEl = document.getElementById('calc-target');
   const swapBtn = document.getElementById('calc-swap');
   const chartSel = getChartSelect();
-  const update = debounce(()=> { const sym = chartSel ? chartSel.value : (allAssets[0] && allAssets[0].symbol); updateCalculatorForSymbol(sym); }, 120);
+  const update = debounce(() => { const sym = chartSel ? chartSel.value : (allAssets[0] && allAssets[0].symbol); updateCalculatorForSymbol(sym); }, 120);
   if (amountEl) amountEl.addEventListener('input', update);
   if (qtyEl) qtyEl.addEventListener('input', update);
   if (targetEl) targetEl.addEventListener('input', update);
-  if (swapBtn) swapBtn.addEventListener('click', (e)=>{ e.preventDefault(); if (!amountEl || !qtyEl) return; const a = amountEl.value; amountEl.value = qtyEl.value; qtyEl.value = a; update(); });
-  if (chartSel) chartSel.addEventListener('change', ()=> update());
+  if (swapBtn) swapBtn.addEventListener('click', (e) => { e.preventDefault(); if (!amountEl || !qtyEl) return; const a = amountEl.value; amountEl.value = qtyEl.value; qtyEl.value = a; update(); });
+  if (chartSel) chartSel.addEventListener('change', () => update());
 }
 
 // Blocking modal helpers for critical errors
@@ -982,9 +1240,9 @@ export function showBlockingModal(title, message, onRetry) {
   function cleanup() {
     modal.classList.add('hidden');
     modal.setAttribute('aria-hidden', 'true');
-    try { retry.removeEventListener('click', onRetryWrap); } catch(e){}
-    try { reload.removeEventListener('click', onReload); } catch(e){}
-    try { close.removeEventListener('click', onClose); } catch(e){}
+    try { retry.removeEventListener('click', onRetryWrap); } catch (e) { }
+    try { reload.removeEventListener('click', onReload); } catch (e) { }
+    try { close.removeEventListener('click', onClose); } catch (e) { }
   }
   function onRetryWrap(e) { e.preventDefault(); if (typeof onRetry === 'function') onRetry(); cleanup(); }
   function onReload(e) { e.preventDefault(); cleanup(); window.location.reload(); }
@@ -1009,7 +1267,7 @@ export async function fetchWithBlocking(url, opts = {}, opts2 = {}) {
     if (r.status === 401) return r; // let caller handle 401
     if (r.status >= 500) {
       let txt = '';
-      try { txt = await r.text(); } catch (e) {}
+      try { txt = await r.text(); } catch (e) { }
       showBlockingModal('Erreur serveur', `Le serveur a retourné ${r.status}. ${txt || ''}`, opts2.onRetry);
     }
     return r;
@@ -1107,12 +1365,12 @@ export function renderWallet(w) {
     // quick percent buttons (only add once)
     if (!tradeForm.querySelector('.quick-pct')) {
       const pctWrap = document.createElement('div'); pctWrap.className = 'trade-actions quick-pct';
-      ['25%','50%','75%','100%'].forEach(lbl => {
+      ['25%', '50%', '75%', '100%'].forEach(lbl => {
         const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost'; b.textContent = lbl;
-        b.addEventListener('click', (e)=>{
+        b.addEventListener('click', (e) => {
           e.preventDefault();
           const cash = Number(w?.cash) || 0;
-          const pct = Number(lbl.replace('%',''))/100;
+          const pct = Number(lbl.replace('%', '')) / 100;
           const amountInput = document.getElementById('w-amount');
           if (amountInput) amountInput.value = (cash * pct).toFixed(2);
         });
@@ -1200,13 +1458,13 @@ export function getAlertsList() {
 
   if (typeof document !== 'undefined') {
 
-    return document.getElementById('alerts-list') || { innerHTML: '', appendChild: () => {} };
+    return document.getElementById('alerts-list') || { innerHTML: '', appendChild: () => { } };
 
   }
 
   if (typeof global !== 'undefined' && global.alertsList) return global.alertsList;
 
-  return { innerHTML: '', appendChild: () => {} };
+  return { innerHTML: '', appendChild: () => { } };
 
 }
 
@@ -1293,17 +1551,17 @@ export async function deleteAlert(id) {
 
 }
 
-function handleAlertFormSubmit(e){
+function handleAlertFormSubmit(e) {
   e.preventDefault();
   const sym = document.getElementById('alert-symbol').value.trim();
   const thr = Number(document.getElementById('alert-threshold').value);
   const dir = document.getElementById('alert-direction').value;
-  if(!sym || !thr) return alert('Remplis les champs');
+  if (!sym || !thr) return alert('Remplis les champs');
   createAlert(sym, thr, dir);
 }
 
-export function attachImportTimeListeners(){
-  try{
+export function attachImportTimeListeners() {
+  try {
     if (typeof document !== 'undefined' && getTabButtons().length) getTabButtons().forEach(b => b.addEventListener('click', () => switchToTab(b.dataset.tab)));
 
     const cs = getChartSelect();
@@ -1323,7 +1581,7 @@ export function attachImportTimeListeners(){
     getTabLogin()?.addEventListener('click', showLogin);
 
     getTabSignup()?.addEventListener('click', showSignup);
-  }catch(e){ /* defensive */ }
+  } catch (e) { /* defensive */ }
 }
 
 // load alerts after successful login / session restore
@@ -1423,7 +1681,10 @@ async function handleLoginSubmit(e) {
 
     const mp = getMainPanel();
 
-    lp && lp.classList.add('hidden');
+    // COMPLETELY REMOVE login panel from DOM instead of hiding
+    if (lp && lp.parentNode) {
+      lp.parentNode.removeChild(lp);
+    }
 
     mp && mp.classList.remove('hidden');
 
@@ -1454,11 +1715,12 @@ async function handleSignupSubmit(e) {
     const resp = await fetch('/auth/signup', {
       method: 'POST',
       headers: {
-        'Content-Type':'application/json' },
-        body: JSON.stringify({
-          email,
-          password
-        })
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email,
+        password
+      })
     });
     const json = await resp.json();
     if (!resp.ok) {
@@ -1484,9 +1746,9 @@ export async function loadCurrentUser() {
 
   try {
 
-    const opts = getAuthToken() ? { 
+    const opts = getAuthToken() ? {
       headers: {
-        Authorization: `Bearer ${getAuthToken()}` 
+        Authorization: `Bearer ${getAuthToken()}`
       }
     } : {};
 

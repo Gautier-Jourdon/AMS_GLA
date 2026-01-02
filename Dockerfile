@@ -7,4 +7,5 @@ RUN npm ci
 
 COPY . .
 
-CMD ["node", "collector/index.js"]
+# Start the web server, not the collector
+CMD ["node", "server.js"]

@@ -1,0 +1,43 @@
+/* === Z-INDEX STACKING TO OVERLAY MAIN PANEL === */
+
+/* Make main panel overlay everything when visible */
+#main-panel {
+    position: relative !important;
+    z-index: 9999 !important;
+    background: var(--bg-primary) !important;
+    min-height: 100vh !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+/* Keep login panel in background */
+#login-signin-panel {
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+/* Market stats - reduce top margin */
+#market-stats {
+    margin-top: 0 !important;
+    margin-bottom: 1.5rem !important;
+}
+
+/* Sidebar collapsed by default */
+.sidebar {
+    padding-top: 80px;
+    z-index: 10000 !important;
+    transform: translateX(-280px) !important;
+    /* Hidden by default */
+}
+
+/* Show sidebar when toggle clicked */
+.sidebar.show {
+    transform: translateX(0) !important;
+}
+
+/* Content area optimization - full width by default */
+.content {
+    padding-top: 0 !important;
+    margin-left: 0 !important;
+    /* Full width since sidebar is hidden */
+}

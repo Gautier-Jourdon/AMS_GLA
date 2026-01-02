@@ -1,0 +1,473 @@
+/* =========================
+   COMPLETE RESPONSIVE SECTION - CLEAN VERSION
+   To replace lines 931-1073 in styles.css
+========================= */
+
+/* Large screens - ads visible */
+@media(min-width:1400px) {
+    #app {
+        max-width: 1800px
+    }
+
+    .brand-text .title {
+        font-size: 1.65rem
+    }
+}
+
+/* Medium-large screens - remove ads */
+@media(max-width:1100px) {
+    .ad {
+        display: none
+    }
+
+    .layout {
+        grid-template-columns: minmax(200px, 240px) 1fr;
+        gap: 20px;
+    }
+
+    .sidebar {
+        grid-column: 1/2
+    }
+
+    .content {
+        grid-column: 2/3
+    }
+
+    /* Better stats cards on medium screens */
+    #market-stats {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+/* Tablet screens */
+@media(max-width:900px) {
+    #app {
+        width: calc(100% - 32px);
+        padding: 16px;
+    }
+
+    .layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .ticker {
+        display: none
+    }
+
+    .app-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+        padding: 16px 20px;
+    }
+
+    .header-controls {
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .user-area {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* Sidebar becomes horizontal on tablet */
+    .sidebar {
+        position: static;
+        padding: 16px;
+        top: auto;
+    }
+
+    .nav {
+        flex-direction: row;
+        overflow-x: auto;
+        gap: 8px;
+        padding-bottom: 8px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--accent-blue) var(--glass-light);
+    }
+
+    .nav::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .nav::-webkit-scrollbar-track {
+        background: var(--glass-light);
+        border-radius: 2px;
+    }
+
+    .nav::-webkit-scrollbar-thumb {
+        background: var(--accent-blue);
+        border-radius: 2px;
+    }
+
+    .tab-btn {
+        white-space: nowrap;
+        padding: 12px 20px;
+        min-width: auto;
+        flex-shrink: 0;
+    }
+
+    .tab-btn.active {
+        transform: translateX(0);
+    }
+
+    .tab-btn:hover {
+        transform: translateX(0) scale(1.02);
+    }
+
+    .sidebar-note {
+        display: none
+    }
+
+    /* Market stats - 2 columns on tablet */
+    #market-stats {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+        margin-bottom: 24px !important;
+    }
+
+    .stat-card {
+        padding: 16px !important;
+    }
+
+    .stat-card div:first-child {
+        font-size: 0.75rem !important;
+    }
+
+    .stat-card div:nth-child(2) {
+        font-size: 1.4rem !important;
+    }
+
+    /* Table improvements */
+    .table-wrap {
+        max-height: none;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+        min-width: 800px;
+        font-size: 0.85rem;
+    }
+
+    /* Chart responsive */
+    #crypto-chart {
+        max-height: 300px;
+    }
+
+    .chart-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .chart-controls label {
+        display: none;
+    }
+
+    .chart-controls select {
+        width: 100%;
+    }
+}
+
+/* Mobile screens */
+@media(max-width:600px) {
+    #app {
+        width: calc(100% - 16px);
+        padding: 12px 8px;
+    }
+
+    /* Particle canvas less intensive on mobile */
+    #particle-canvas {
+        opacity: 0.2 !important;
+    }
+
+    .app-header {
+        padding: 12px 16px;
+        margin-bottom: 16px;
+    }
+
+    .logo {
+        width: 48px;
+        height: 48px;
+        font-size: 1.2rem;
+    }
+
+    .brand {
+        gap: 12px;
+    }
+
+    .brand-text .title {
+        font-size: 1.1rem;
+    }
+
+    .brand-text .subtitle {
+        font-size: 0.75rem;
+    }
+
+    .header-controls {
+        gap: 8px;
+    }
+
+    .user-area {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .current-user {
+        text-align: center;
+        font-size: 0.85rem;
+    }
+
+    #logout-btn,
+    #theme-toggle {
+        width: 100%;
+        padding: 10px 16px;
+        justify-content: center;
+    }
+
+    /* Login panels - centered and full width on mobile */
+    #login-signin-panel {
+        padding: 0 !important;
+    }
+
+    .panel-login {
+        max-width: 100%;
+        padding: 20px 16px;
+        margin: 0;
+    }
+
+    .panel-login h1 {
+        font-size: 1.4rem;
+        text-align: center;
+    }
+
+    .panel-login .tabs {
+        flex-direction: row;
+        gap: 8px;
+    }
+
+    .panel-login .tabs .btn {
+        flex: 1;
+        padding: 12px 16px;
+        font-size: 0.9rem;
+    }
+
+    #login-forms form {
+        gap: 14px;
+    }
+
+    #login-forms input {
+        padding: 14px 16px;
+        font-size: 1rem;
+    }
+
+    #login-forms .btn.primary {
+        padding: 14px 20px;
+        font-size: 1rem;
+    }
+
+    /* Main panels */
+    .content .panel {
+        padding: 16px;
+        border-radius: var(--radius-md);
+    }
+
+    /* Market stats - stacked on mobile */
+    #market-stats {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+        margin-bottom: 20px !important;
+    }
+
+    .stat-card {
+        padding: 20px 16px !important;
+    }
+
+    /* Section headers */
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding-bottom: 12px;
+    }
+
+    .section-header h2 {
+        font-size: 1.3rem;
+    }
+
+    .controls {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .controls input {
+        width: 100%;
+    }
+
+    /* Table - full width scroll */
+    .table-wrap {
+        margin: 0 -16px;
+        padding: 4px 16px;
+        border-radius: 0;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    table {
+        font-size: 0.8rem;
+        min-width: 700px;
+    }
+
+    thead th {
+        padding: 12px 8px;
+        font-size: 0.7rem;
+    }
+
+    td {
+        padding: 10px 8px;
+    }
+
+    /* Hide less important column on mobile (Supply) */
+    table th:nth-child(9),
+    table td:nth-child(9) {
+        display: none;
+    }
+
+    /* Chart section */
+    #crypto-chart {
+        max-height: 250px;
+    }
+
+    .calc {
+        padding: 16px;
+    }
+
+    .calc-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .calc .field {
+        width: 100%;
+        min-width: 100%;
+    }
+
+    .calc-results {
+        font-size: 0.85rem;
+        padding: 12px;
+    }
+
+    /* Wallet section */
+    #wallet-summary {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    #wallet-summary .card {
+        padding: 16px;
+        font-size: 1rem;
+    }
+
+    #wallet-summary .card span {
+        font-size: 1.3rem;
+    }
+
+    #wallet-trade-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #wallet-trade-form select,
+    #wallet-trade-form input,
+    #wallet-trade-form button {
+        width: 100%;
+    }
+
+    /* Modal adjustments */
+    .modal-content {
+        min-width: auto;
+        width: 90vw;
+        max-width: 90vw;
+        padding: 24px 16px;
+    }
+
+    /* Buttons */
+    .btn {
+        padding: 12px 20px;
+        font-size: 0.95rem;
+    }
+
+    /* Forms */
+    .form-row {
+        gap: 8px;
+    }
+
+    input[type=text],
+    input[type=email],
+    input[type=password],
+    input[type=number],
+    select {
+        padding: 14px 16px;
+        font-size: 1rem;
+    }
+}
+
+/* Very small screens */
+@media(max-width:380px) {
+    .brand-text .title {
+        font-size: 1rem;
+    }
+
+    .brand-text .subtitle {
+        display: none;
+    }
+
+    .logo {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+
+    table {
+        min-width: 600px;
+        font-size: 0.75rem;
+    }
+
+    .section-header h2 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Landscape mobile */
+@media(max-height:500px) and (orientation:landscape) {
+    .app-header {
+        padding: 8px 16px;
+        margin-bottom: 12px;
+    }
+
+    .logo {
+        width: 40px;
+        height: 40px;
+    }
+
+    .brand-text .subtitle {
+        display: none;
+    }
+
+    #market-stats {
+        grid-template-columns: repeat(4, 1fr) !important;
+        margin-bottom: 16px !important;
+    }
+
+    .stat-card {
+        padding: 12px !important;
+    }
+
+    .stat-card div:nth-child(2) {
+        font-size: 1.2rem !important;
+    }
+}

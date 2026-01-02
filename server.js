@@ -12,6 +12,7 @@ import nodemailer from 'nodemailer';
 import { createUser as authCreateUser, authenticateUser } from './backend/auth.js';
 import * as Wallet from './backend/wallet.js';
 import logger from './backend/logger.js';
+import * as Predictions from './backend/predictions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,11 +126,11 @@ app.use((req, res, next) => {
 // Helper to create configured Postgres client (centralized defaults)
 function getPgClient() {
   const host = process.env.PGHOST || 'localhost';
-  const port = Number(process.env.PGPORT || process.env.PG_PORT || 5433);
+  const port = Number(process.env.PGPORT || process.env.PG_PORT || 54322);  // Changed from 5433 to 54322
   const user = process.env.PGUSER || 'postgres';
   const password = process.env.PGPASSWORD || 'postgres';
   const database = process.env.PGDATABASE || 'postgres';
-  try { logger.debug('[PG] getPgClient config', { host, port, user, database }); } catch(e){}
+  try { logger.debug('[PG] getPgClient config', { host, port, user, database }); } catch (e) { }
   return new Client({ host, port, user, password, database });
 }
 
@@ -143,7 +144,7 @@ async function dbGetUserByEmail(email) {
     if (r.rowCount === 0) return null;
     return r.rows[0];
   } catch (e) {
-    try { await client.end(); } catch (e) {}
+    try { await client.end(); } catch (e) { }
     console.error('[DB] get user error', e.message || e);
     return null;
   }
@@ -158,7 +159,7 @@ async function dbCreateUser(email) {
     if (r.rowCount === 0) return null;
     return r.rows[0];
   } catch (e) {
-    try { await client.end(); } catch (e) {}
+    try { await client.end(); } catch (e) { }
     console.error('[DB] create user error', e.message || e);
     return null;
   }
@@ -200,7 +201,7 @@ app.get("/api/assets", async (req, res) => {
     await client.end();
     return res.json(rows);
   } catch (err) {
-    try { await client.end(); } catch (e) {}
+    try { await client.end(); } catch (e) { }
     console.error('[API] Erreur DB:', err.message || err);
     // Attempt to serve static assets.json as a graceful fallback for local dev
     try {
@@ -216,72 +217,72 @@ app.get("/api/assets", async (req, res) => {
   }
 });
 
-  // Alerts endpoints (protected)
-  app.post('/api/alerts', verifyAuth, async (req, res) => {
-    const { symbol, threshold, direction, delivery_method } = req.body || {};
-    console.info('[API] /api/alerts received', { body: req.body, user: (req.user && (req.user.email || req.user.id)) });
-    if (!symbol || (threshold === undefined) || !direction) {
-      console.warn('[API] /api/alerts missing fields', { symbol, threshold, direction });
-      return res.status(400).json({ error: 'missing fields' });
-    }
-    // basic validation to avoid DB errors
-    const thr = Number(threshold);
-    if (!isFinite(thr) || thr <= 0 || thr > 1e12) {
-      console.warn('[API] /api/alerts invalid threshold', { threshold });
-      return res.status(400).json({ error: 'invalid threshold' });
-    }
-    if (!['above','below'].includes(direction)) {
-      console.warn('[API] /api/alerts invalid direction', { direction });
-      return res.status(400).json({ error: 'invalid direction' });
-    }
-    const delivery = (delivery_method === 'discord') ? 'discord' : 'email';
-    const userId = req.user?.id || 'unknown';
-    if (DEV_AUTH) {
-      const arr = DEV_ALERTS.get(userId) || [];
-      const id = 'dev-alert-' + Date.now();
-      const obj = { id, user_id: userId, symbol, threshold, direction, created_at: new Date().toISOString() };
-      arr.unshift(obj);
-      DEV_ALERTS.set(userId, arr);
-      return res.status(201).json(obj);
-    }
-    const client = getPgClient();
+// Alerts endpoints (protected)
+app.post('/api/alerts', verifyAuth, async (req, res) => {
+  const { symbol, threshold, direction, delivery_method } = req.body || {};
+  console.info('[API] /api/alerts received', { body: req.body, user: (req.user && (req.user.email || req.user.id)) });
+  if (!symbol || (threshold === undefined) || !direction) {
+    console.warn('[API] /api/alerts missing fields', { symbol, threshold, direction });
+    return res.status(400).json({ error: 'missing fields' });
+  }
+  // basic validation to avoid DB errors
+  const thr = Number(threshold);
+  if (!isFinite(thr) || thr <= 0 || thr > 1e12) {
+    console.warn('[API] /api/alerts invalid threshold', { threshold });
+    return res.status(400).json({ error: 'invalid threshold' });
+  }
+  if (!['above', 'below'].includes(direction)) {
+    console.warn('[API] /api/alerts invalid direction', { direction });
+    return res.status(400).json({ error: 'invalid direction' });
+  }
+  const delivery = (delivery_method === 'discord') ? 'discord' : 'email';
+  const userId = req.user?.id || 'unknown';
+  if (DEV_AUTH) {
+    const arr = DEV_ALERTS.get(userId) || [];
+    const id = 'dev-alert-' + Date.now();
+    const obj = { id, user_id: userId, symbol, threshold, direction, created_at: new Date().toISOString() };
+    arr.unshift(obj);
+    DEV_ALERTS.set(userId, arr);
+    return res.status(201).json(obj);
+  }
+  const client = getPgClient();
+  try {
+    await client.connect();
+    // ensure confirmed column exists (safe to run)
+    try { console.debug('[API] ensuring confirmed column exists'); await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS confirmed boolean DEFAULT false"); } catch (e) { console.warn('[API] alter confirmed failed', e && (e.message || e)); }
+    // ensure delivery_method column exists (added later) to avoid insert errors
+    try { console.debug('[API] ensuring delivery_method column exists'); await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS delivery_method text DEFAULT 'email'"); } catch (e) { console.warn('[API] alter delivery_method failed', e && (e.message || e)); }
+    console.debug('[API] inserting alert', { userId, symbol, threshold: thr, direction, delivery });
+    const ins = await client.query('INSERT INTO public.alerts (user_id, symbol, threshold, direction, delivery_method) VALUES ($1,$2,$3,$4,$5) RETURNING *', [userId, symbol, thr, direction, delivery]);
+    const alertRow = ins && ins.rows && ins.rows[0];
+    console.info('[API] alert inserted', { id: alertRow && alertRow.id });
+    // send confirmation email (if email method)
     try {
-      await client.connect();
-      // ensure confirmed column exists (safe to run)
-      try { console.debug('[API] ensuring confirmed column exists'); await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS confirmed boolean DEFAULT false"); } catch(e){ console.warn('[API] alter confirmed failed', e && (e.message || e)); }
-      // ensure delivery_method column exists (added later) to avoid insert errors
-      try { console.debug('[API] ensuring delivery_method column exists'); await client.query("ALTER TABLE public.alerts ADD COLUMN IF NOT EXISTS delivery_method text DEFAULT 'email'"); } catch(e){ console.warn('[API] alter delivery_method failed', e && (e.message || e)); }
-      console.debug('[API] inserting alert', { userId, symbol, threshold: thr, direction, delivery });
-      const ins = await client.query('INSERT INTO public.alerts (user_id, symbol, threshold, direction, delivery_method) VALUES ($1,$2,$3,$4,$5) RETURNING *', [userId, symbol, thr, direction, delivery]);
-      const alertRow = ins && ins.rows && ins.rows[0];
-      console.info('[API] alert inserted', { id: alertRow && alertRow.id });
-      // send confirmation email (if email method)
-      try {
-        // prepare token
-        const secret = process.env.JWT_SECRET || 'devsecret';
-        const token = jwt.sign({ alertId: alertRow.id, userId }, secret, { expiresIn: '7d' });
-        const origin = req.headers.origin || (`http://localhost:${PORT}`);
-        const confirmUrl = origin + '/api/alerts/confirm?token=' + encodeURIComponent(token);
-        // send email if SMTP configured and user email present
-        const userEmail = req.user && req.user.email;
-        console.debug('[MAIL] confirmation', { delivery, userEmail, smtp: !!process.env.SMTP_HOST });
-        if (delivery === 'email' && userEmail && process.env.SMTP_HOST && process.env.SMTP_PORT) {
-          const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: (process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true'), auth: (process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined) });
-          await transporter.sendMail({ from: process.env.EMAIL_FROM || 'no-reply@example.com', to: userEmail, subject: 'Confirmation d\'alerte AMS', text: `Bonjour,\n\nMerci de confirmer votre alerte pour ${symbol} (${direction} ${thr}). Cliquez sur le lien suivant pour confirmer : ${confirmUrl}\n\nSi vous n'avez pas demandé cette alerte, ignorez cet email.`, html: `<p>Bonjour,</p><p>Merci de confirmer votre alerte pour <strong>${symbol}</strong> (${direction} ${thr}).</p><p><a href="${confirmUrl}">Confirmer l\'alerte</a></p><p>Si vous n\'avez pas demandé cette alerte, ignorez cet email.</p>` });
-          console.info('[MAIL] sent confirmation to', userEmail);
-        } else {
-          console.info('[MAIL] skipped sending confirmation (no smtp or email)', { delivery, userEmail });
-        }
-      } catch(e) { logger.warn('[MAIL] send failed', { err: e && (e.message || String(e)) }); }
+      // prepare token
+      const secret = process.env.JWT_SECRET || 'devsecret';
+      const token = jwt.sign({ alertId: alertRow.id, userId }, secret, { expiresIn: '7d' });
+      const origin = req.headers.origin || (`http://localhost:${PORT}`);
+      const confirmUrl = origin + '/api/alerts/confirm?token=' + encodeURIComponent(token);
+      // send email if SMTP configured and user email present
+      const userEmail = req.user && req.user.email;
+      console.debug('[MAIL] confirmation', { delivery, userEmail, smtp: !!process.env.SMTP_HOST });
+      if (delivery === 'email' && userEmail && process.env.SMTP_HOST && process.env.SMTP_PORT) {
+        const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: (process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true'), auth: (process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined) });
+        await transporter.sendMail({ from: process.env.EMAIL_FROM || 'no-reply@example.com', to: userEmail, subject: 'Confirmation d\'alerte AMS', text: `Bonjour,\n\nMerci de confirmer votre alerte pour ${symbol} (${direction} ${thr}). Cliquez sur le lien suivant pour confirmer : ${confirmUrl}\n\nSi vous n'avez pas demandé cette alerte, ignorez cet email.`, html: `<p>Bonjour,</p><p>Merci de confirmer votre alerte pour <strong>${symbol}</strong> (${direction} ${thr}).</p><p><a href="${confirmUrl}">Confirmer l\'alerte</a></p><p>Si vous n\'avez pas demandé cette alerte, ignorez cet email.</p>` });
+        console.info('[MAIL] sent confirmation to', userEmail);
+      } else {
+        console.info('[MAIL] skipped sending confirmation (no smtp or email)', { delivery, userEmail });
+      }
+    } catch (e) { logger.warn('[MAIL] send failed', { err: e && (e.message || String(e)) }); }
 
-      await client.end();
-      return res.status(201).json(alertRow);
-    } catch (e) {
-      try { await client.end(); } catch (e) {}
-      console.error('[API] alerts insert error', e.message);
-      return res.status(500).json({ error: 'db error' });
-    }
-  });
+    await client.end();
+    return res.status(201).json(alertRow);
+  } catch (e) {
+    try { await client.end(); } catch (e) { }
+    console.error('[API] alerts insert error', e.message);
+    return res.status(500).json({ error: 'db error' });
+  }
+});
 
 // Confirmation endpoint: validates token and marks alert as confirmed
 app.get('/api/alerts/confirm', async (req, res) => {
@@ -303,7 +304,7 @@ app.get('/api/alerts/confirm', async (req, res) => {
       console.info('[API] /api/alerts/confirm updated rows', { rowCount: r && r.rowCount });
       if (r.rowCount === 0) return res.status(404).send('alert not found');
       return res.send('Alerte confirmée.');
-    } catch (e) { try{await client.end();}catch(e){} console.error('[API] alerts confirm error', e && (e.message || String(e))); return res.status(500).send('error'); }
+    } catch (e) { try { await client.end(); } catch (e) { } console.error('[API] alerts confirm error', e && (e.message || String(e))); return res.status(500).send('error'); }
   } catch (e) {
     console.error('[API] confirm token error', e && (e.message || String(e)));
     return res.status(400).send('invalid or expired token');
@@ -320,57 +321,70 @@ app.get('/api/diag/alerts-schema', async (req, res) => {
     await client.end();
     return res.json({ columns: cols.rows || [], count: cnt && cnt.rows && cnt.rows[0] ? cnt.rows[0].cnt : null });
   } catch (e) {
-    try { await client.end(); } catch (e) {}
+    try { await client.end(); } catch (e) { }
     console.error('[DIAG] alerts-schema error', e && (e.message || String(e)));
     return res.status(500).json({ error: 'diag-failed', details: e && (e.message || String(e)) });
   }
 });
 
-  app.get('/api/alerts', verifyAuth, async (req, res) => {
-    const userId = req.user?.id || 'unknown';
-    if (DEV_AUTH) {
-      return res.json(DEV_ALERTS.get(userId) || []);
-    }
-    const client = getPgClient();
-    try {
-      await client.connect();
-      const rows = await client.query('SELECT id, symbol, threshold, direction, created_at FROM public.alerts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-      await client.end();
-      return res.json(rows.rows);
-    } catch (e) {
-      try { await client.end(); } catch (e) {}
-      console.error('[API] alerts list error', e.message);
-      return res.status(500).json({ error: 'db error' });
-    }
-  });
+app.get('/api/alerts', verifyAuth, async (req, res) => {
+  const userId = req.user?.id || 'unknown';
 
-  app.delete('/api/alerts/:id', verifyAuth, async (req, res) => {
-    const id = req.params.id;
-    const userId = req.user?.id || 'unknown';
-    if (DEV_AUTH) {
-      const arr = DEV_ALERTS.get(userId) || [];
-      const idx = arr.findIndex(a => a.id === id);
-      if (idx === -1) return res.status(404).json({ error: 'not found' });
-      arr.splice(idx, 1);
-      DEV_ALERTS.set(userId, arr);
-      return res.json({ ok: true });
+  // DEV mode: return in-memory alerts
+  if (DEV_AUTH) {
+    return res.json(DEV_ALERTS.get(userId) || []);
+  }
+
+  // Production mode: query database
+  const client = getPgClient();
+  try {
+    await client.connect();
+    const rows = await client.query('SELECT id, symbol, threshold, direction, created_at, confirmed, delivery_method FROM public.alerts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+    await client.end();
+    console.info('[API] alerts fetched', { userId, count: rows.rows.length });
+    return res.json(rows.rows);
+  } catch (e) {
+    try { await client.end(); } catch (endErr) { }
+    console.error('[API] alerts list error', { userId, error: e.message, code: e.code });
+
+    // If table doesn't exist, return empty array instead of 500
+    if (e.code === '42P01') { // PostgreSQL error code for "table does not exist"
+      console.warn('[API] alerts table does not exist, returning empty array');
+      return res.json([]);
     }
-    const client = getPgClient();
-    try {
-      await client.connect();
-      // Ensure ownership
-      const owner = await client.query('SELECT user_id FROM public.alerts WHERE id = $1', [id]);
-      if (owner.rowCount === 0) { await client.end(); return res.status(404).json({ error: 'not found' }); }
-      if (owner.rows[0].user_id !== userId) { await client.end(); return res.status(403).json({ error: 'forbidden' }); }
-      await client.query('DELETE FROM public.alerts WHERE id = $1', [id]);
-      await client.end();
-      return res.json({ ok: true });
-    } catch (e) {
-      try { await client.end(); } catch (e) {}
-      console.error('[API] alerts delete error', e.message);
-      return res.status(500).json({ error: 'db error' });
-    }
-  });
+
+    // For other errors, return 500 with details
+    return res.status(500).json({ error: 'db error', details: e.message });
+  }
+});
+
+app.delete('/api/alerts/:id', verifyAuth, async (req, res) => {
+  const id = req.params.id;
+  const userId = req.user?.id || 'unknown';
+  if (DEV_AUTH) {
+    const arr = DEV_ALERTS.get(userId) || [];
+    const idx = arr.findIndex(a => a.id === id);
+    if (idx === -1) return res.status(404).json({ error: 'not found' });
+    arr.splice(idx, 1);
+    DEV_ALERTS.set(userId, arr);
+    return res.json({ ok: true });
+  }
+  const client = getPgClient();
+  try {
+    await client.connect();
+    // Ensure ownership
+    const owner = await client.query('SELECT user_id FROM public.alerts WHERE id = $1', [id]);
+    if (owner.rowCount === 0) { await client.end(); return res.status(404).json({ error: 'not found' }); }
+    if (owner.rows[0].user_id !== userId) { await client.end(); return res.status(403).json({ error: 'forbidden' }); }
+    await client.query('DELETE FROM public.alerts WHERE id = $1', [id]);
+    await client.end();
+    return res.json({ ok: true });
+  } catch (e) {
+    try { await client.end(); } catch (e) { }
+    console.error('[API] alerts delete error', e.message);
+    return res.status(500).json({ error: 'db error' });
+  }
+});
 
 const _thisFile = fileURLToPath(import.meta.url);
 const _isMain = process.argv[1] === _thisFile;
@@ -381,7 +395,7 @@ if (_isMain) {
       console.log('[DEV] DEV_AUTH enabled — DB calls are skipped or emulated in dev mode');
     }
     // run startup checks (extracted for testability) in all modes to ensure probes run
-    runStartupChecks().catch(() => {});
+    runStartupChecks().catch(() => { });
   });
 }
 
@@ -465,7 +479,7 @@ app.post('/auth/signup', async (req, res) => {
     });
     const txt = await r.text().catch(() => '');
     let json;
-    try { json = txt ? JSON.parse(txt) : {}; } catch(e) { json = { raw: txt }; }
+    try { json = txt ? JSON.parse(txt) : {}; } catch (e) { json = { raw: txt }; }
     if (!r.ok) {
       console.error('[AUTH] signup proxied response error', r.status, txt);
     } else {
@@ -499,7 +513,7 @@ app.post('/auth/logout', (req, res) => {
       console.info('[AUTH] cleared cookie', name);
     });
     // also attempt to clear common auth cookie names
-    ['sb-access-token','sb-refresh-token','supabase-auth-token'].forEach(name => {
+    ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token'].forEach(name => {
       res.cookie(name, '', { expires: new Date(0), path: '/' });
     });
     return res.json({ ok: true, cleared: toClear });
@@ -545,7 +559,7 @@ app.post('/auth/login', async (req, res) => {
     });
     const txt = await r.text().catch(() => '');
     let json;
-    try { json = txt ? JSON.parse(txt) : {}; } catch(e) { json = { raw: txt }; }
+    try { json = txt ? JSON.parse(txt) : {}; } catch (e) { json = { raw: txt }; }
     if (!r.ok) {
       console.error('[AUTH] login proxied response error', r.status, json || txt);
       // Do NOT attempt an automatic DB fallback on invalid credentials.
@@ -586,13 +600,11 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // Wallet endpoints
-app.post('/api/wallet/create', verifyAuth, async (req, res) =>
-{
+app.post('/api/wallet/create', verifyAuth, async (req, res) => {
 
   const userId = req.user?.id || 'unknown';
 
-  try
-  {
+  try {
 
     const w = await Wallet.createWalletFor(userId, req.body?.initialCash || 10000);
 
@@ -600,8 +612,7 @@ app.post('/api/wallet/create', verifyAuth, async (req, res) =>
 
   }
 
-  catch (e)
-  {
+  catch (e) {
 
     console.error('[WALLET] create error', e.message || e);
 
@@ -611,14 +622,11 @@ app.post('/api/wallet/create', verifyAuth, async (req, res) =>
 
 });
 
-app.get('/api/wallet/value', verifyAuth, async (req, res) =>
-{
+app.get('/api/wallet/value', verifyAuth, async (req, res) => {
 
   const userId = req.user?.id || 'unknown';
 
-  try
-
-  {
+  try {
 
     const w = await Wallet.getWalletFor(userId);
 
@@ -626,13 +634,9 @@ app.get('/api/wallet/value', verifyAuth, async (req, res) =>
 
     const priceMap = {};
 
-    if (syms.length)
+    if (syms.length) {
 
-    {
-
-      try
-
-      {
+      try {
 
         const client = getPgClient();
 
@@ -646,13 +650,9 @@ app.get('/api/wallet/value', verifyAuth, async (req, res) =>
 
       }
 
-      catch (e)
+      catch (e) {
 
-      {
-
-        try
-
-        {
+        try {
 
           const staticPath = path.join(__dirname, 'collector', 'data', 'assets.json');
 
@@ -676,9 +676,7 @@ app.get('/api/wallet/value', verifyAuth, async (req, res) =>
 
   }
 
-  catch (e)
-
-  {
+  catch (e) {
 
     console.error('[WALLET] value error', e.message || e);
 
@@ -700,14 +698,11 @@ app.get('/api/wallet', verifyAuth, async (req, res) => {
   }
 });
 
-app.get('/api/wallet/history', verifyAuth, async (req, res) =>
-{
+app.get('/api/wallet/history', verifyAuth, async (req, res) => {
 
   const userId = req.user?.id || 'unknown';
 
-  try
-
-  {
+  try {
 
     const h = await Wallet.getHistory(userId);
 
@@ -715,9 +710,7 @@ app.get('/api/wallet/history', verifyAuth, async (req, res) =>
 
   }
 
-  catch (e)
-
-  {
+  catch (e) {
 
     console.error('[WALLET] history error', e.message || e);
 
@@ -734,16 +727,14 @@ app.post('/api/wallet/trade', verifyAuth, async (req, res) => {
 
   if (!symbol || !side || !amountUsd) return res.status(400).json({ error: 'missing fields' });
 
-  try
-  {
+  try {
 
     // try to get price from local assets.json fallback
     const staticPath = path.join(__dirname, 'collector', 'data', 'assets.json');
 
     let price = null;
 
-    try
-    {
+    try {
 
       const txt = await fs.readFile(staticPath, 'utf8');
 
@@ -755,8 +746,7 @@ app.post('/api/wallet/trade', verifyAuth, async (req, res) => {
 
     }
 
-    catch (e)
-    {
+    catch (e) {
 
       price = null;
 
@@ -774,8 +764,7 @@ app.post('/api/wallet/trade', verifyAuth, async (req, res) => {
 
   }
 
-  catch (e)
-  {
+  catch (e) {
 
     console.error('[WALLET] trade error', e.message || e);
 
@@ -786,6 +775,124 @@ app.post('/api/wallet/trade', verifyAuth, async (req, res) => {
     }
     return res.status(500).json({ error: 'trade failed' });
 
+  }
+});
+
+// Predictions endpoints
+app.get('/api/predictions/:symbol', async (req, res) => {
+  const { symbol } = req.params;
+  const days = parseInt(req.query.days) || 30;
+
+  try {
+    console.info('[API] /api/predictions request', { symbol, days });
+
+    // Récupérer l'historique depuis assets_history
+    const client = getPgClient();
+    await client.connect();
+
+    const query = `
+      SELECT price_usd as price, created_at as timestamp 
+      FROM public.assets_history 
+      WHERE symbol = $1 
+      ORDER BY created_at DESC 
+      LIMIT $2
+    `;
+
+    const result = await client.query(query, [symbol.toUpperCase(), days]);
+    await client.end();
+
+    if (result.rows.length < 2) {
+      console.warn('[API] Insufficient history data for predictions', { symbol, rows: result.rows.length });
+      return res.status(400).json({
+        error: 'Insufficient historical data',
+        minRequired: 2,
+        available: result.rows.length
+      });
+    }
+
+    // Inverser pour avoir du plus ancien au plus récent
+    const history = result.rows.reverse().map(row => ({
+      price: parseFloat(row.price),
+      timestamp: new Date(row.timestamp).getTime()
+    }));
+
+    // Calculer prévisions
+    const predictions = Predictions.calculatePredictions(history);
+
+    // Ajouter recommandation
+    const recommendation = Predictions.getRecommendation(predictions);
+
+    const response = {
+      symbol: symbol.toUpperCase(),
+      period: days,
+      dataPoints: history.length,
+      predictions,
+      recommendation
+    };
+
+    console.info('[API] Predictions calculated', { symbol, dataPoints: history.length });
+    return res.json(response);
+
+  } catch (e) {
+    console.error('[API] predictions error', { symbol, error: e.message });
+    return res.status(500).json({ error: 'predictions failed', details: e.message });
+  }
+});
+
+// Endpoint pour obtenir des prévisions multiples
+app.post('/api/predictions/batch', async (req, res) => {
+  const { symbols } = req.body || {};
+
+  if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+    return res.status(400).json({ error: 'missing symbols array' });
+  }
+
+  if (symbols.length > 10) {
+    return res.status(400).json({ error: 'max 10 symbols allowed' });
+  }
+
+  try {
+    const results = {};
+
+    for (const symbol of symbols) {
+      try {
+        const client = getPgClient();
+        await client.connect();
+
+        const query = `
+          SELECT price_usd as price, created_at as timestamp 
+          FROM public.assets_history 
+          WHERE symbol = $1 
+          ORDER BY created_at DESC 
+          LIMIT 30
+        `;
+
+        const result = await client.query(query, [symbol.toUpperCase()]);
+        await client.end();
+
+        if (result.rows.length >= 2) {
+          const history = result.rows.reverse().map(row => ({
+            price: parseFloat(row.price),
+            timestamp: new Date(row.timestamp).getTime()
+          }));
+
+          results[symbol] = {
+            predictions: Predictions.calculatePredictions(history),
+            recommendation: Predictions.getRecommendation(Predictions.calculatePredictions(history))
+          };
+        } else {
+          results[symbol] = { error: 'Insufficient data' };
+        }
+      } catch (e) {
+        results[symbol] = { error: e.message };
+      }
+    }
+
+    return res.json(results);
+
+  } catch (e) {
+    console.error('[API] batch predictions error', e.message);
+    return res.status(500).json({ error: 'batch predictions failed' });
   }
 });
 
@@ -811,7 +918,7 @@ app.post('/rpc/signup', async (req, res) => {
     if (r.rowCount === 0) return res.status(409).json({ error: 'user exists' });
     return res.json(r.rows[0]);
   } catch (e) {
-    try { await client.end(); } catch(e){}
+    try { await client.end(); } catch (e) { }
     console.error('[RPC] signup error', e.message);
     return res.status(500).json({ error: 'rpc signup failed' });
   }
@@ -835,7 +942,7 @@ app.post('/rpc/login', async (req, res) => {
     if (r.rowCount === 0) return res.status(404).json({ error: 'not found' });
     return res.json(r.rows[0]);
   } catch (e) {
-    try { await client.end(); } catch(e){}
+    try { await client.end(); } catch (e) { }
     console.error('[RPC] login error', e.message);
     return res.status(500).json({ error: 'rpc login failed' });
   }
@@ -919,3 +1026,28 @@ app.post('/dev/export-dev-data', async (req, res) => {
     return res.status(500).json({ error: 'export failed', details: e.message || e });
   }
 });
+
+// === URL ROUTING WITH AUTH PROTECTION ===
+
+// Root path - redirect to /webui/connexion
+app.get('/', (req, res) => {
+  res.redirect('/webui/connexion');
+});
+
+// /webui/connexion - Login page
+app.get('/webui/connexion', (req, res) => {
+  res.sendFile(path.join(__dirname, 'webui', 'login.html'));
+});
+
+// /home - Redirect to /webui/index.html
+app.get('/home', (req, res) => {
+  res.redirect('/webui/index.html');
+});
+
+// /webui/index.html - Protected main app (auth check done in client-side JS)
+// The static middleware will serve it, but we add auth check in the HTML
+
+// Serve static webui files
+app.use('/webui', express.static(path.join(__dirname, 'webui')));
+
+// Start server

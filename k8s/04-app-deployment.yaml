@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ams-gla-app
+  namespace: ams-gla
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ams-gla-app
+  template:
+    metadata:
+      labels:
+        app: ams-gla-app
+    spec:
+      containers:
+      - name: ams-gla
+        image: ams-gla:latest  # TODO: Replace with your actual image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: PORT
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: NODE_ENV
+        - name: PGHOST
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: PGHOST
+        - name: PGPORT
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: PGPORT
+        - name: PGDATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: PGDATABASE
+        - name: PGUSER
+          valueFrom:
+            secretKeyRef:
+              name: ams-gla-secrets
+              key: PGUSER
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ams-gla-secrets
+              key: PGPASSWORD
+        - name: SUPABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: SUPABASE_URL
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ams-gla-secrets
+              key: SUPABASE_KEY
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ams-gla-secrets
+              key: JWT_SECRET
+        - name: DEV_AUTH
+          valueFrom:
+            configMapKeyRef:
+              name: ams-gla-config
+              key: DEV_AUTH
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/assets
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/assets
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ams-gla-service
+  namespace: ams-gla
+spec:
+  selector:
+    app: ams-gla-app
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http

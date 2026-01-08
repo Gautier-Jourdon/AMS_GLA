@@ -6,6 +6,8 @@ Le projet consiste à développer un **collecteur de données** en Node.js qui s
 
 Objectif principal : disposer d’un script fiable qui, à intervalles réguliers, récupère les dernières valeurs des actifs configurés et les enregistre dans un format exploitable.
 
+**Remarque :** au fil du développement, le périmètre a été étendu au-delà du collecteur initial afin de constituer une plateforme plus complète : API backend, interface web, authentification (avec fallbacks), alertes/notifications, portefeuille virtuel, tests de charge, et éléments DevOps (CI/CD et Kubernetes). Ces ajouts ont été intégrés progressivement, tout en conservant les livrables attendus.
+
 ## 2. Fonctionnalités attendues
 
 1. **Configuration des actifs** :

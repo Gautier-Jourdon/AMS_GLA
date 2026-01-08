@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Diagramme de Gantt — AMS GLA</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div>
+        <h1>Diagramme de Gantt — AMS GLA</h1>
+        <p class="subtitle">Fenêtre : 20/10/2025 → 08/01/2026 (Octobre à Janvier uniquement)</p>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="swatch swatch-task"></span>Tâche</div>
+        <div class="legend-item"><span class="swatch swatch-milestone"></span>Jalon</div>
+        <div class="legend-item"><span class="swatch swatch-break"></span>Pause / activité réduite</div>
+        <div class="legend-item"><span class="swatch swatch-weekend"></span>Week-end</div>
+      </div>
+    </header>
+
+    <main class="card">
+      <div class="controls">
+        <div class="control">
+          <label for="zoom">Zoom</label>
+          <input id="zoom" type="range" min="10" max="26" value="16" />
+          <span id="zoomValue" class="mono">16 px/jour</span>
+        </div>
+        <div class="control">
+          <button id="scrollToday" class="btn" type="button">Aller à “Aujourd’hui”</button>
+          <button id="scrollStart" class="btn ghost" type="button">Aller au début</button>
+        </div>
+      </div>
+
+      <section class="gantt" aria-label="Diagramme de Gantt">
+        <div class="gantt-grid" id="ganttGrid">
+          <div class="gantt-left" id="ganttLeft">
+            <div class="left-header">Lots / tâches</div>
+            <div class="left-body" id="taskList"></div>
+          </div>
+
+          <div class="gantt-right" id="ganttRight">
+            <div class="right-header">
+              <div class="months" id="monthsHeader"></div>
+              <div class="days" id="daysHeader"></div>
+            </div>
+            <div class="right-body" id="timeline">
+              <div class="background" id="background"></div>
+              <div class="bars" id="bars"></div>
+              <div class="today-line" id="todayLine" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p class="hint">Astuce : survole une barre pour voir les détails (dates, durée, description).</p>
+      </footer>
+    </main>
+  </div>
+
+  <div class="tooltip" id="tooltip" role="tooltip" aria-hidden="true"></div>
+
+  <script src="script.js" type="module"></script>
+</body>
+</html>

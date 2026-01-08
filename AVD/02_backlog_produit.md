@@ -22,5 +22,22 @@ Backlog très synthétique des User Stories du projet. Chaque US a : un identifi
 | US16 | Rédiger la conclusion et les pistes d’amélioration        | Documentation   | B        |
 | US17 | Ajouter une petite interface web de consultation des données | Fonctionnelle| B        |
 | US18 | Mettre en place un script `npm run webui` pour lancer l’interface | Technique | B |
+| US19 | Implémenter le fallback BDD locale pour l'authentification | Technique | H |
+| US20 | Refondre le calculateur en Simulateur d'Investissement | Fonctionnelle | M |
+| US21 | Améliorer l'UX des graphiques (taille, défaut BTC, contrôles) | Fonctionnelle | M |
+| US22 | Traduire l'intégralité de l'interface et des logs en FR | Fonctionnelle | M |
+| US23 | Ajouter une Heatmap de marché | Fonctionnelle | B |
+| US24 | Mettre en place les tests de charge K6 | Technique | M |
+| US25 | Intégrer les notifications Discord (Webhook) | Fonctionnelle | M |
+| US26 | Traduire le README et la documentation technique | Documentation | M |
+| US27 | Mettre en place un Portefeuille Virtuel (création, trade simulé, historique) | Fonctionnelle | M |
+| US28 | Ajouter les endpoints API liés au portefeuille | Technique | M |
+| US29 | Améliorer le flux d’auth côté WebUI (écrans login/signup, wiring, états) | Fonctionnelle | M |
+| US30 | Renforcer la robustesse serveur (cas limites, erreurs, réponses inattendues) | Technique | M |
+| US31 | Renforcer la couverture et les tests orientés branches | Test | M |
+| US32 | Ajouter un export / endpoints complémentaires (selon besoins) | Fonctionnelle | B |
+| US33 | Réaliser un diagramme de Gantt propre (page HTML/CSS/JS) | Documentation | M |
+| US34 | Rédiger / structurer le rapport au format LaTeX (couverture, sommaire, annexes) | Documentation | H |
+| US35 | Documenter l’usage d’IA et les ressources web utilisées (annexe) | Documentation | M |
 
 Le détail de l’avancement (À faire / En cours / Fait) est suivi dans le tableau Kanban.

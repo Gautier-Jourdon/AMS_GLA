@@ -5,10 +5,10 @@
 window.debugInitApp = function () {
     console.log('=== [DEBUG] Manual initApp call ===');
     console.log('[DEBUG] localStorage keys:', Object.keys(localStorage));
-    console.log('[DEBUG] authToken:', localStorage.getItem('authToken')?.substring(0, 50) + '...');
-    console.log('[DEBUG] authUser:', localStorage.getItem('authUser'));
+    console.log('[DEBUG] supabase_token:', localStorage.getItem('supabase_token')?.substring(0, 50) + '...');
+    console.log('[DEBUG] supabase_user:', localStorage.getItem('supabase_user'));
 
-    const userStr = localStorage.getItem('authUser');
+    const userStr = localStorage.getItem('supabase_user');
     if (userStr) {
         try {
             const user = JSON.parse(userStr);

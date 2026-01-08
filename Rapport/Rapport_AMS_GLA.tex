@@ -1,0 +1,383 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{margin=2.4cm}
+
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue, pdfpagemode=UseOutlines, bookmarksopen=true}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{needspace}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{AMS GLA}
+\rhead{Rapport de projet}
+\cfoot{\thepage}
+
+\renewcommand{\headrulewidth}{0.4pt}
+
+\setlist[itemize]{topsep=2pt, itemsep=2pt, parsep=0pt}
+
+\title{\textbf{Rapport de Projet}\\[2mm]
+\Large Plateforme de Surveillance et d’Analyse des Marchés de Cryptomonnaies (AMS GLA)}
+\author{(Étudiant) \quad Gautier Jourdon}
+\date{20 octobre 2025 -- 8 janvier 2026}
+
+\begin{document}
+% ---------------------------
+% Page de garde
+% ---------------------------
+\pagenumbering{gobble}
+\begin{titlepage}
+  \centering
+
+  \vspace*{2.5cm}
+
+  {\LARGE \textbf{Rapport de Projet}\\[3mm]}
+  {\Large Plateforme de Surveillance et d’Analyse des Marchés de Cryptomonnaies\\[1mm]}
+  {\Large \textbf{AMS GLA}\\[10mm]}
+
+  \includegraphics[width=0.38\textwidth]{avignon-universite.png}
+
+  \vfill
+
+  \begin{tabular}{@{}rl@{}}
+    \textbf{Auteur :} & Gautier Jourdon \\
+    \textbf{Cadre :} & Master Informatique (AMS / GLA) \\
+  \end{tabular}
+
+  \vspace*{1.6cm}
+\end{titlepage}
+
+% ---------------------------
+% Sommaire
+% ---------------------------
+\cleardoublepage
+\pagenumbering{roman}
+\setcounter{page}{1}
+\thispagestyle{plain}
+\tableofcontents
+
+\cleardoublepage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% Évite des débuts/fin de section isolés (limite les coupures inesthétiques)
+\Needspace{8\baselineskip}
+\section{Introduction}
+
+Ce document présente le projet \textbf{AMS GLA} portant sur la création d’une plateforme dédiée à la surveillance et à l’analyse des marchés de cryptomonnaies. L’objectif est de construire un système \textbf{fiable, structuré et évolutif}, capable de \textbf{collecter automatiquement} des données issues d’APIs publiques, de les stocker proprement, puis de les exposer via une API et une interface web.
+
+Le projet constitue un support pour mettre en pratique une chaîne complète de génie logiciel : conception, organisation du travail, tests, outillage CI/CD, conteneurisation et déploiement Kubernetes. Le rapport est volontairement progressif : il retrace la démarche, les choix techniques, ainsi que les ajustements réalisés en cours de développement, en particulier lors des phases de stabilisation.
+
+\section{Objectifs du projet}
+
+Le projet vise à construire une plateforme capable de :
+\begin{itemize}
+  \item \textbf{Collecter} des données de marché (quasi temps réel) via des APIs externes (ex. CoinCap).
+  \item \textbf{Planifier} et fiabiliser la collecte (gestion d’erreurs, relances, journalisation).
+  \item \textbf{Stocker} les données dans une base adaptée, avec un schéma exploitable.
+  \item \textbf{Exposer} les informations via une API backend et des endpoints orientés usages.
+  \item \textbf{Proposer} une application web pour visualiser les données (tableaux, graphiques, filtres), gérer l’authentification, des alertes et des fonctionnalités additionnelles (ex. wallet virtuel).
+  \item \textbf{Valider} le système par des tests (unitaires, intégration, couverture/branches), et compléter par un volet performance.
+\end{itemize}
+
+\section{Architecture générale (cible et réalisation)}
+
+\subsection{Vue d’ensemble}
+
+L’architecture est organisée autour de plusieurs composants, regroupés dans un dépôt unique :
+\begin{itemize}
+  \item une application de \textbf{collecte} (scripts Node) pour interroger des APIs publiques et normaliser les données ;
+  \item un \textbf{backend} servant d’API (Express) et de point central pour l’authentification, l’accès aux données, et certaines fonctionnalités (alertes, wallet) ;
+  \item une \textbf{WebUI} statique (HTML/CSS/JS) servie par le serveur, qui consomme les endpoints backend ;
+  \item une couche \textbf{asynchrone} (exemple scheduler/worker via RabbitMQ) pour illustrer la tolérance aux pannes et le découplage ;
+  \item une couche \textbf{DevOps} (Docker, Kubernetes, CI/CD) permettant d’exécuter et déployer les services de façon reproductible.
+\end{itemize}
+
+\subsection{Organisation du dépôt (concret)}
+
+Les répertoires principaux observés dans le dépôt sont :
+\begin{itemize}
+  \item \texttt{server.js} : serveur principal (API + service des fichiers WebUI).
+  \item \texttt{backend/} : modules backend (ex. auth, wallet, logging).
+  \item \texttt{collector/} : collecte et services associés (API externes, planification, etc.).
+  \item \texttt{webui/} : interface web (logique UI, gestion d’auth côté client, affichage des données).
+  \item \texttt{tests/} : suite de tests (Jest + Supertest + jsdom) et un scénario performance k6.
+  \item \texttt{k8s/} : manifests Kubernetes (déploiement / configuration).
+  \item \texttt{database/}, \texttt{supabase/} : scripts et support DB (setup local, schémas, exports).
+  \item \texttt{scheduler/} et \texttt{worker/} : exemple publisher/consumer RabbitMQ.
+\end{itemize}
+
+\subsection{Remarques sur l’authentification et les environnements}
+
+Un point important dans la réalisation est la distinction entre un mode de développement et un mode plus proche d’un environnement « réel » : le serveur supporte un fonctionnement local permettant d’avancer sans dépendre entièrement d’un service externe, tout en conservant des flux non-dev testables (proxy/validation).
+
+Ce choix a surtout été motivé par : (i) la reproductibilité locale, (ii) la stabilité des tests, et (iii) la possibilité de travailler par incréments sans bloquer sur l’infrastructure.
+
+\section{Organisation du travail (Kanban) et itérations}
+
+Le projet étant réalisé individuellement, un Kanban simple a été utilisé (backlog $\rightarrow$ en cours $\rightarrow$ test/revue $\rightarrow$ fait). Cette organisation a permis de garder une vision claire des tâches et de basculer rapidement en phase de stabilisation (tests/corrections) lorsque nécessaire.
+
+Même si la méthode n’est pas Scrum, j’ai structuré le travail en lots (appelés \textit{sprints} dans ma documentation) pour clarifier la progression :
+\begin{itemize}
+  \item \textbf{Sprint 00} : collecte (API CoinCap, assets, fetcher, collecteur, base technique).
+  \item \textbf{Sprint 01} : Docker et Kubernetes.
+  \item \textbf{Sprint 02} : CI/CD sur GitHub Actions + runner self-hosted.
+  \item \textbf{Sprint 03} : WebUI (dashboard initial).
+  \item \textbf{Sprint 04} : fiabilisation backend (auth, fallbacks), tests perf (k6), intégrations (Discord webhook), durcissement.
+  \item \textbf{Sprint 05} : UI/UX et finalisation (graphes, traduction, fonctionnalités additionnelles).
+\end{itemize}
+
+\section{Planification (Gantt)}
+
+J’ai réalisé un diagramme de Gantt prévisionnel et je l’ai ensuite reconstruit pour la période du 20/10/2025 au 08/01/2026 (en tenant compte de la période de Noël et du Nouvel An). Pour une version lisible et propre, une page HTML dédiée a été ajoutée :
+
+\begin{center}
+\href{../Gantt/index.html}{\texttt{Gantt/index.html}}
+\end{center}
+
+En complément, le tableau ci-dessous résume la planification :
+
+\begin{longtable}{@{}p{5.2cm}p{2cm}p{2cm}p{2.4cm}p{3.2cm}@{}}
+\toprule
+\textbf{Lot / tâche} & \textbf{Début} & \textbf{Fin} & \textbf{Durée} & \textbf{Résultat attendu} \\
+\midrule
+\endhead
+Cadrage, backlog initial & 20/10 & 31/10 & $\sim$2 sem. & Vision + priorités \\
+Sprint 00 (collecte) & 01/11 & 15/11 & $\sim$2 sem. & Collecteur fonctionnel \\
+Fiabilisation collecte / logs & 10/11 & 20/11 & $\sim$1.5 sem. & Logs + robustesse \\
+Sprint 01 (Docker/K8s) & 16/11 & 30/11 & $\sim$2 sem. & Déploiement initial \\
+Sprint 02 (CI/CD) & 22/11 & 30/11 & $\sim$1 sem. & CI/CD + runner \\
+Sprint 03 (WebUI) & 01/12 & 10/12 & $\sim$1.5 sem. & UI consultable \\
+Sprint 04 (backend, durcissement) & 11/12 & 22/12 & $\sim$2 sem. & Auth stable, fallbacks \\
+Campagne tests + coverage & 15/12 & 30/12 & $\sim$2 sem. & Non-régression \\
+Pause Noël (activité réduite) & 24/12 & 26/12 & 3 j & --- \\
+Pic corrections + coverage & 26/12 & 28/12 & 3 j & Stabilisation \\
+Sprint 05 (UI/UX) & 28/12 & 31/12 & 4 j & Ergonomie + traductions \\
+Wallet + DB/alertes & 30/12 & 02/01 & 4 j & Fonctionnalités \\
+Pause Nouvel An (activité réduite) & 31/12 & 01/01 & 2 j & --- \\
+Consolidation finale & 02/01 & 08/01 & $\sim$1 sem. & Livraison \\
+\bottomrule
+\end{longtable}
+
+\section{Usage de l’IA et des ressources web}
+
+Dans le cadre du projet, je me suis appuyé sur des \textbf{ressources web} (documentation officielle, exemples, articles) ainsi que sur de l’\textbf{assistance par IA} pour accélérer certaines étapes, en particulier :
+\begin{itemize}
+  \item clarification de points d’API / syntaxe (Node/Express, configuration outillage) ;
+  \item reformulation ponctuelle de documentation ;
+  \item aide à la mise en forme de livrables (ex. diagramme de Gantt sous forme HTML).
+\end{itemize}
+
+En revanche, j’ai cherché à \textbf{limiter l’usage de l’IA sur la logique fonctionnelle} (choix de comportement métier) et surtout sur la \textbf{stratégie de tests}. L’objectif était de garder une maîtrise directe du fonctionnement du projet et de l’évaluation de la qualité.
+
+Les ressources utilisées (IA et sources web) sont listées en annexe afin de conserver une traçabilité claire.
+
+\section{Tests (démarche et réalisation)}
+
+Les tests ont occupé une place centrale, car le projet couvre plusieurs couches (collecte, backend, UI) et s’appuie sur des dépendances externes (API, base de données, services). Dans une logique proche du cours, l’objectif n’a pas été de multiplier des scénarios « au hasard », mais de proposer une suite structurée, lisible et maintenable.
+
+\subsection{Statique vs dynamique (positionnement)}
+
+Les tests réalisés dans le dépôt sont majoritairement des tests dynamiques (exécution du code et observation du comportement). L’analyse statique (lint, analyse de code, etc.) n’est pas l’axe principal du projet : elle est utile en complément, mais n’apporte pas, à elle seule, une validation suffisante des flux réseau, de l’authentification ou des comportements UI.
+
+\subsection{Outillage et structuration de la suite}
+
+L’outillage repose sur :
+\begin{itemize}
+  \item \textbf{Jest} pour les tests automatisés ;
+  \item \textbf{jsdom} pour exécuter des tests WebUI sans navigateur réel ;
+  \item \textbf{Supertest} pour valider les endpoints Express par requêtes HTTP ;
+  \item \textbf{k6} pour un test de charge (non-fonctionnel).
+\end{itemize}
+
+Un point clé de la structuration est \texttt{tests/jest.setup.js} : il prépare l’environnement (polyfills) et fournit des objets simulés (DOM, canvas/Chart) afin que les tests soient répétables et qu’ils échouent pour de « vraies » raisons (logique/test), plutôt que pour des divergences d’environnement.
+
+\subsection{Nomenclature : niveaux de test}
+
+La nomenclature du cours est reprise ci-dessous, avec la manière dont elle s’applique au dépôt.
+\begin{itemize}
+  \item \textbf{Tests unitaires} : ciblent une fonction ou un module avec dépendances isolées. Exemple : tests de rendu de table côté WebUI (mock du DOM et d’un \texttt{tableBody}), ou tests de fonctions d’UI avec \texttt{fetch} simulé.
+  \item \textbf{Tests d’intégration} : valident un assemblage cohérent (ex. application Express + routes), en gardant le contrôle sur les dépendances externes. Exemple : endpoints testés via Supertest sur l’application importée.
+  \item \textbf{Tests système} : visent une exécution « bout-en-bout » au plus proche du réel (services réellement lancés, base réellement connectée, parcours E2E). Le dépôt ne contient pas de campagne E2E navigateur (Playwright/Cypress) ni de suite qui lance l’ensemble des services en condition de production ; ces tests ne sont donc pas couverts de manière exhaustive.
+  \item \textbf{Tests de validation / acceptation} : valident un besoin métier formulé (critères d’acceptation, scénarios utilisateurs). Ici, la validation est plutôt implicite via les tests unitaires/intégration et la vérification manuelle de l’interface ; elle n’est pas formalisée en BDD (Gherkin) ou en scénarios automatisés.
+\end{itemize}
+
+Ce choix (dominante \textit{unitaires + intégration}) est cohérent avec un projet individuel : l’essentiel de la valeur est de détecter rapidement les régressions sur les chemins critiques (auth, endpoints, UI).
+
+\subsection{Isolation : mocks, stubs et doubles de test}
+
+Le cours insiste sur la structuration et l’isolation. Dans le projet, l’isolation a été réalisée via des doubles de test :
+\begin{itemize}
+  \item \textbf{mocks} : objets simulés avec attentes (ex. \texttt{jest.unstable\_mockModule('node-fetch', ...)} pour piloter les réponses Supabase, ou mock du client \texttt{pg} pour contrôler les retours SQL et déclencher des branches) ;
+  \item \textbf{stubs} : retours simplifiés, déterministes, utiles quand la vérification porte sur la sortie et non sur les interactions fines (ex. \texttt{fetch.mockResolvedValueOnce(...)} pour imposer une réponse JSON).
+\end{itemize}
+
+Concrètement, cette approche permet de :
+\begin{itemize}
+  \item découpler les tests de la disponibilité réseau ;
+  \item reproduire des cas d’erreurs rares (timeouts, réponses non conformes) ;
+  \item tester des comportements sans base de données réelle.
+\end{itemize}
+
+\subsection{Boîte blanche, boîte noire, boîte grise}
+
+Les tests se positionnent à plusieurs niveaux :
+\begin{itemize}
+  \item \textbf{boîte noire} : requêtes HTTP via Supertest avec vérification des statuts et des corps de réponse, sans dépendre de l’implémentation interne ;
+  \item \textbf{boîte blanche} : tests orientés branches/couverture, et tests qui déclenchent volontairement des chemins d’erreur (par mocks ciblés) ;
+  \item \textbf{boîte grise} : intégration API (Supertest) tout en contrôlant les dépendances (mocks \texttt{node-fetch}/\texttt{pg}), ce qui donne une exécution proche du réel mais déterministe.
+\end{itemize}
+
+\subsection{Exemples représentatifs (backend et WebUI)}
+
+\textbf{Backend (intégration)} : l’application Express est importée, les requêtes sont exécutées via \texttt{supertest}, et les dépendances externes sont remplacées par des doubles (mocks \texttt{node-fetch}, \texttt{pg}). Cela permet de valider des flux tels que login, \texttt{/auth/me}, RPC de création/récupération utilisateur et \texttt{/api/assets}.
+
+\textbf{WebUI (unitaires)} : la logique d’UI est testée dans un environnement jsdom, en simulant les éléments DOM attendus ainsi que des APIs comme \texttt{localStorage}. L’objectif est de sécuriser des fonctions ciblées (rendu, interactions simples) et d’éviter les régressions sur des handlers.
+
+\subsection{Couverture, branches et robustesse}
+
+La fin de développement a inclus des tests visant explicitement des branches (cas d’erreurs, statuts inattendus). L’objectif n’était pas de maximiser artificiellement un pourcentage, mais de réduire les zones non testées sur des parties sensibles. La couverture est utilisée comme indicateur de pilotage (seuils Jest), puis complétée par des ajouts ciblés lorsque des lignes ou branches critiques restent non exercées.
+
+\subsection{Performance (k6)}
+
+Un script k6 (\texttt{tests/performance/load.js}) permet de lancer un scénario de charge simple sur des endpoints de base (\texttt{/health}, \texttt{/api/assets}), avec un objectif p95 inférieur à 500ms. Il s’agit d’un test non-fonctionnel, utilisé comme signal rapide de régression de performance en local.
+
+\section{Dynamique Git (repères temporels)}
+
+Sur la période du projet, les commits se concentrent principalement :
+\begin{itemize}
+  \item \textbf{fin novembre 2025} : forte activité autour de CI/CD et Kubernetes (itérations sur workflow, runner self-hosted, structuration k8s) ;
+  \item \textbf{mi/fin décembre 2025} : phase la plus dense côté stabilisation (correctifs serveur, montée couverture tests, améliorations UI, wallet/alertes) ;
+  \item \textbf{début janvier 2026} : consolidation finale (intégration globale, dernières mises à jour).
+\end{itemize}
+
+Ce découpage est cohérent avec la progression globale : mise en place des fondations (infra + pipeline), accélération sur les fonctionnalités et la fiabilité, puis finalisation et intégration.
+
+\section{Difficultés rencontrées et retour d’expérience}
+
+Plusieurs difficultés ont été rencontrées lors de l’intégration et du déploiement. Elles ont principalement concerné l’environnement d’exécution et l’intégration base de données, davantage que la logique applicative.
+
+\subsection{Runner GitHub Actions self-hosted (CI/CD) et WSL}
+
+Le choix d’un runner self-hosted avait pour objectif d’exécuter l’ensemble de la chaîne au plus proche d’un environnement local (contraintes de ressources, dépendances). En pratique, l’intégration avec WSL a été une source de blocages : certains problèmes de déploiement persistent lorsque le runner repose sur cet environnement hybride. Cela a demandé des itérations sur la configuration et une attention particulière à la compatibilité Docker/WSL et aux chemins d’exécution.
+
+\subsection{Supabase en local via conteneurs Docker (virtualisation)}
+
+La mise en place de Supabase en local via Docker s’est révélée plus complexe que prévu. En particulier, l’absence d’interface d’administration (Supabase Studio) a été rencontrée dans certains cas, en lien avec des problèmes de virtualisation. Ces difficultés ont ralenti les phases d’intégration et de validation, car la visibilité sur l’état de la base et des schémas était plus limitée.
+
+\subsection{Poids de l’intégration base de données}
+
+Sur l’ensemble du projet, une part importante des problèmes (de l’ordre de 80\%) a été liée à la base de données et à son intégration : démarrage des services, connectivité, schémas, droits, comportements en environnement dev/non-dev et cohérence entre composants. Ce constat justifie le choix d’une stratégie de tests fortement axée sur l’isolation (mocks/stubs) et sur des tests d’intégration contrôlés, afin de pouvoir avancer même lorsque l’infrastructure locale est partiellement instable.
+
+\section{Conclusion et perspectives}
+
+Au final, AMS GLA regroupe une chaîne complète (collecte $\rightarrow$ backend $\rightarrow$ UI $\rightarrow$ déploiement) et a servi de support concret pour consolider des compétences techniques et méthodologiques.
+
+Au-delà des livrables, ce projet m’a apporté une meilleure capacité à me gérer : planification du travail, priorisation, et arbitrage entre fonctionnalités, qualité et temps disponible. Cette dimension a été particulièrement importante lors des phases de stabilisation et d’intégration.
+
+Le projet a également clarifié l’intérêt des tests. Même si la mise en place d’une suite structurée n’a pas été immédiate (outillage, isolation des dépendances, choix des niveaux), l’usage régulier des tests unitaires et d’intégration a progressivement rendu le développement plus sûr et plus itératif. Cette progression a été d’autant plus visible que l’intégration base de données a concentré une part importante des difficultés.
+
+Les principales perspectives concernent : durcissement de la sécurité (authentification plus stricte, gestion des secrets), extension des tests non-fonctionnels (profiling/charge plus réalistes) et ajout de parcours E2E (UI) pour compléter la validation actuelle.
+
+\clearpage
+\appendix
+\section{Annexe A --- Informations générales (période, méthode, technologies)}
+
+\begin{itemize}
+  \item \textbf{Période} : 20/10/2025 $\rightarrow$ 08/01/2026.
+  \item \textbf{Méthode} : Agile Kanban (projet individuel).
+  \item \textbf{Technologies principales} : Node.js (ESM), Express, PostgreSQL / Supabase (local), RabbitMQ, Docker, Kubernetes, Jest, Supertest, k6.
+\end{itemize}
+
+\section{Annexe B --- Assistance par IA et ressources web}
+
+Cette annexe regroupe les outils et ressources mobilisés pendant le projet (à compléter). Les noms de produits sont mentionnés uniquement à des fins d’identification des outils utilisés, sans reproduction de contenus protégés.
+
+\subsection*{Outils d’assistance et environnement}
+\begin{itemize}
+  \item \textbf{Gemini} : assistance ponctuelle (clarification, reformulation, aide à la mise en forme).
+  \item \textbf{Windsurf} : environnement de \textit{vibe-coding}/assistance dans l’IDE (navigation, édition, itérations rapides).
+\end{itemize}
+
+\subsection*{Ressources web (à compléter)}
+\begin{itemize}
+  \item Documentations officielles : Node.js, Express, Jest, Supertest, k6, Docker, Kubernetes, Supabase.
+  \item Articles, discussions techniques, exemples (URL) : \dots
+\end{itemize}
+
+\clearpage
+\section{Annexe C --- Traçabilité (documents AVD, US et sprints)}
+
+Cette annexe regroupe les éléments de suivi de projet présents dans le répertoire \texttt{AVD/} et donne une lecture de traçabilité entre :
+(i) le cahier des charges, (ii) le backlog produit, (iii) le tableau Kanban, et (iv) la structuration par sprints.
+
+\subsection*{Références (répertoire AVD)}
+\begin{itemize}
+  \item \texttt{AVD/01\_cahier\_des\_charges.md}
+  \item \texttt{AVD/02\_backlog\_produit.md}
+  \item \texttt{AVD/03\_tableau\_kanban.md}
+  \item \texttt{AVD/04\_sprint.md}
+\end{itemize}
+
+\subsection*{Correspondance US $\rightarrow$ sprints (synthèse)}
+
+Le tableau ci-dessous donne une correspondance indicative entre les User Stories (US) et les lots de travail (sprints). Certaines US ont été étalées sur plusieurs sprints (ex. stabilisation et couverture), ce qui est courant lorsque des ajustements apparaissent après intégration.
+
+\begin{longtable}{@{}p{1.2cm}p{9.3cm}p{2.4cm}@{}}
+\toprule
+\textbf{US} & \textbf{Intitulé (résumé)} & \textbf{Sprint(s)} \\
+\midrule
+\endhead
+US1 & Liste des actifs (\texttt{assets.json}) & 00 \\
+US2 & Appels API CoinCap & 00 \\
+US3 & Gestion des erreurs API & 00 \\
+US4 & Modèle / format des données collectées & 00 \\
+US5 & Planification (cron) & 00 \\
+US6 & Lancement manuel collecteur & 00 \\
+US7 & Écriture résultats / logs & 00 \\
+US8 & Horodatage et identifiant dans les sorties & 00 \\
+US9 & Setup Jest & 00 \\
+US10 & Tests lecture \texttt{assets.json} & 00 \\
+US11 & Tests erreurs API / cron & 00 \\
+US12 & Dockerfile & 01 \\
+US13 & CronJob Kubernetes & 01 \\
+US14 & Structure du rapport & 08 \\
+US15 & Démarche Agile / Kanban dans le rapport & 08 \\
+US16 & Conclusion / pistes d’amélioration & 08 \\
+US17 & WebUI de consultation & 03 \\
+US18 & Script \texttt{npm run webui} & 03 \\
+US19 & Auth fallback DB locale (fix 401/500) & 04 \\
+US20 & Simulateur d’investissement & 05 \\
+US21 & UX graphiques (taille, BTC défaut, contrôles) & 05 \\
+US22 & Traduction FR (UI + logs) & 04--05 \\
+US23 & Heatmap marché & 05 \\
+US24 & Tests de charge k6 & 04 \\
+US25 & Webhook Discord & 04 \\
+US26 & Traduction README / doc technique & 05--08 \\
+US27 & Portefeuille virtuel (fonctionnel) & 06 \\
+US28 & Endpoints API portefeuille & 06 \\
+US29 & Flux auth côté WebUI (login/signup, wiring) & 07 \\
+US30 & Robustesse serveur (cas limites, erreurs) & 07 \\
+US31 & Renforcement coverage / tests branches & 07 \\
+US32 & Export / endpoints complémentaires & 07 \\
+US33 & Diagramme de Gantt (HTML/CSS/JS) & 08 \\
+US34 & Rapport LaTeX (couverture, sommaire, annexes) & 08 \\
+US35 & Annexe usage IA + ressources web & 08 \\
+\bottomrule
+\end{longtable}
+
+\end{document}

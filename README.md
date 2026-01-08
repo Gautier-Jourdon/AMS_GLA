@@ -88,3 +88,6 @@ Endpoints principaux:
 
 UI : onglet `Portefeuille` dans l'interface web. Connexion requise (dev-mode autorise tokens en mémoire).
 
+## Diagramme de Gantt
+
+Pour visualiser le diagramme, il faut exécuter : `python -m http.server 8080` dans le dossier `Gantt`.

@@ -22,7 +22,7 @@
   <!-- Auth protection - redirect to login if not authenticated -->
   <script>
     (function () {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('supabase_token');
       if (!token) {
         // No auth token, redirect to login
         window.location.href = '/webui/';

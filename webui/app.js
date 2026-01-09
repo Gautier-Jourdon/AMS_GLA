@@ -570,6 +570,11 @@ if (typeof document !== 'undefined') {
   if (alertForm) {
     alertForm.addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      // guard against duplicate handlers firing the same submit
+      try {
+        if (alertForm.dataset && alertForm.dataset.amsSubmitting === '1') return;
+        if (alertForm.dataset) alertForm.dataset.amsSubmitting = '1';
+      } catch (_) { }
       // Check auth from memory or fallback to localStorage
       let user = getAuthUser();
       if (!user && typeof localStorage !== 'undefined') {
@@ -620,6 +625,7 @@ if (typeof document !== 'undefined') {
         alert('Erreur réseau lors de la création de l\'alerte: ' + (e && e.message));
       } finally {
         if (submitBtn) submitBtn.disabled = false;
+        try { if (alertForm && alertForm.dataset) delete alertForm.dataset.amsSubmitting; } catch (_) { }
       }
     });
   }
@@ -1807,13 +1813,30 @@ export async function deleteAlert(id) {
 
 }
 
-function handleAlertFormSubmit(e) {
+async function handleAlertFormSubmit(e) {
   e.preventDefault();
-  const sym = document.getElementById('alert-symbol').value.trim();
-  const thr = Number(document.getElementById('alert-threshold').value);
-  const dir = document.getElementById('alert-direction').value;
-  if (!sym || !thr) return alert('Remplis les champs');
-  createAlert(sym, thr, dir);
+  const form = typeof document !== 'undefined' ? document.getElementById('alert-form') : null;
+  try {
+    if (form && form.dataset && form.dataset.amsSubmitting === '1') return;
+    if (form && form.dataset) form.dataset.amsSubmitting = '1';
+  } catch (_) { }
+
+  const sym = (document.getElementById('alert-symbol') || {}).value?.trim() || '';
+  const thr = Number((document.getElementById('alert-threshold') || {}).value || 0);
+  const dir = (document.getElementById('alert-direction') || {}).value || '';
+  if (!sym || !thr) {
+    try { alert('Remplis les champs'); } catch (_) { }
+    try { if (form && form.dataset) delete form.dataset.amsSubmitting; } catch (_) { }
+    return;
+  }
+
+  try {
+    await createAlert(sym, thr, dir);
+  } catch (e) {
+    try { console.error('alert submit failed (handler)', e); } catch (_) { }
+  } finally {
+    try { if (form && form.dataset) delete form.dataset.amsSubmitting; } catch (_) { }
+  }
 }
 
 export function attachImportTimeListeners() {

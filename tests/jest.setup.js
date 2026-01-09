@@ -46,7 +46,7 @@ if (typeof HTMLCanvasElement !== 'undefined') {
   };
 }
 
-// Mock Chart.js global si nécessaire (souvent attaché à window)
+// Mock de Chart.js global (car il est souvent attaché à window)
 global.Chart = class {
   constructor(ctx, config) {
     this.ctx = ctx;
@@ -70,7 +70,7 @@ const createFakeElem = (overrides = {}) => {
     style: {},
     dataset: {},
     attributes: {},
-    // Méthodes DOM essentielles
+
     addEventListener: () => { },
     removeEventListener: () => { },
     appendChild: (child) => { elem.children.push(child); return child; },
@@ -90,7 +90,7 @@ const createFakeElem = (overrides = {}) => {
     dispatchEvent: () => true,
     focus: () => { },
     blur: () => { },
-    // Canvas specific
+
     getContext: () => ({
       beginPath: () => { },
       moveTo: () => { },
@@ -114,7 +114,7 @@ const createFakeElem = (overrides = {}) => {
   return elem;
 };
 
-// Elements spécifiques
+// Elements spécifiques (Fake)
 global.loadingEl = createFakeElem();
 global.errorEl = createFakeElem();
 global.tableBody = createFakeElem();
